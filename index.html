@@ -62,7 +62,7 @@
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
     /* 2D 원형 미니맵 캔버스 */
-    #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; background: #0a0a0f; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+    #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
   </style>
 </head>
 <body>
@@ -140,7 +140,7 @@
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
 
-    // ✨ 시야각 시스템 (2D 섭리 복원)
+    // ✨ 시야각 시스템 복원 (처음엔 좁게 시작)
     let currentFov = Math.PI / 8.8; 
     const maxFov = Math.PI / 1.5;
     
@@ -202,7 +202,7 @@
       if(ans) { socket.emit('submitAnswer', ans); document.getElementById('ansInput').value = ""; }
     }
 
-    // ✨ 아이템 획득 시 시야 확장 복원
+    // ✨ 아이템을 주우면 시야각이 점점 넓어집니다.
     socket.on('itemCollected', () => { 
         battery = Math.min(100, battery + 10); 
         currentFov = Math.min(maxFov, currentFov + Math.PI / 8); 
@@ -244,6 +244,7 @@
     function isColliding(x, y) {
       if(!collisionPixels) return false;
       let rx = x - MAP_CENTER; let ry = y - MAP_CENTER;
+      // 수학적 회전 연산
       let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
       let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
       let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
@@ -332,7 +333,7 @@
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
         
-        // ✨ 완벽한 칠흑 (선명한 어둠)
+        // ✨ 완전무결한 어둠 (빛이 없으면 아무것도 보이지 않습니다)
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
         scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
@@ -342,35 +343,40 @@
         bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 10, 0), new BABYLON.Vector3(0, -0.5, 1), currentFov, 2, scene);
         bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7); bLantern.intensity = 15; 
 
-        // 빛이 닿을 때만 드러나는 어두운 바둑판 질감 바닥
+        // 빛이 비출 때만 하얀 선이 드러나는 칠흑의 바닥
         const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_SIZE*0.1, height: MAP_SIZE*0.1}, scene);
         let groundTex = new BABYLON.DynamicTexture("groundTex", {width: 512, height: 512}, scene, false);
         let gCtx = groundTex.getContext();
         gCtx.fillStyle = "#020203"; gCtx.fillRect(0,0,512,512);
-        gCtx.strokeStyle = "#08080c"; gCtx.lineWidth = 2;
+        gCtx.strokeStyle = "#ffffff"; gCtx.lineWidth = 2; // 하얀색 선
         for(let i=0; i<512; i+=32){ gCtx.beginPath(); gCtx.moveTo(i,0); gCtx.lineTo(i,512); gCtx.stroke(); gCtx.beginPath(); gCtx.moveTo(0,i); gCtx.lineTo(512,i); gCtx.stroke(); }
         groundTex.update(); groundTex.uScale = MAP_SIZE * 0.1 / 10; groundTex.vScale = MAP_SIZE * 0.1 / 10;
         
         const gMat = new BABYLON.StandardMaterial("gMat", scene);
-        gMat.diffuseTexture = groundTex; gMat.specularColor = new BABYLON.Color3(0,0,0); gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
+        gMat.diffuseTexture = groundTex; 
+        gMat.specularColor = new BABYLON.Color3(0,0,0); 
+        // ✨ 자체 발광을 완전히 차단하여 랜턴 빛이 없으면 암흑이 되도록 합니다.
+        gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
+        gMat.disableLighting = false; 
         gMat.maxSimultaneousLights = 24; ground.material = gMat;
 
         const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
         const bMat = new BABYLON.StandardMaterial("bMat", scene);
         bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5; border.material = bMat; border.position.y = 1;
 
-        // ✨ 3D 입체 진실 블록의 원형 (땅에 밀착되도록 높이 설정)
-        // 2D에서 5픽셀 단위로 스캔했으므로 크기를 딱 맞춥니다.
+        // ✨ 3D 입체 진실 (높이 15를 주어 완벽한 물리적 벽을 형성)
         truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5, height: 15, depth: 5}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.2); tMat.diffuseColor = new BABYLON.Color3(0.5, 0.4, 0.1);
+        tMat.diffuseColor = new BABYLON.Color3(1, 0.8, 0.2); 
+        // ✨ 글자 역시 자체 발광을 끄고, 불빛에만 드러나도록 수정
+        tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
         truthBaseBox.material = tMat;
 
         bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
         let pMat = new BABYLON.StandardMaterial("pMat", scene);
         pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); pMat.disableLighting = true; bPlayer.material = pMat; bPlayer.position.y = 1.5;
 
-        // ✨ 사방팔방 온전히 흩어지는 파티클 꼬리
+        // 사방팔방 온전히 흩어지는 파티클 꼬리
         playerTrailParticle = new BABYLON.ParticleSystem("trail", 500, scene);
         let ptTex = new BABYLON.DynamicTexture("pt", 64, scene); let ptCtx = ptTex.getContext();
         ptCtx.beginPath(); ptCtx.arc(32, 32, 30, 0, Math.PI*2);
@@ -383,7 +389,7 @@
         playerTrailParticle.color1 = new BABYLON.Color4(1, 0.8, 0.2, 0.8); playerTrailParticle.color2 = new BABYLON.Color4(1, 0.4, 0, 0.2); playerTrailParticle.colorDead = new BABYLON.Color4(0, 0, 0, 0);
         playerTrailParticle.start();
 
-        // ✨ 신비로운 안식처 (초록빛 홀로그램 성소)
+        // ✨ 신비로운 안식처 (초록빛 홀로그램 성소, 범위 대폭 축소)
         stations2D.forEach((s, i) => {
             let cx = to3Dx(s.x); let cz = to3Dz(s.y);
             let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: 10}, scene);
@@ -409,34 +415,34 @@
 
     bScene = createScene();
 
-    // ✨ 2D 충돌 배열과 완벽하게 일치하는 축으로 3D 블록(Voxel) 조립
+    // ✨ 2D 충돌 배열과 단 1mm의 오차도 없이 일치하는 회전축 교정
     function updateTruthVoxel() {
         if(!collisionPixels) return;
         let matrices = [];
-        let mapScale = MAP_SIZE * COLLISION_SCALE; // 800
+        let mapScale = MAP_SIZE * COLLISION_SCALE; 
 
         for(let cy=0; cy<mapScale; cy+=5){ 
             for(let cx=0; cx<mapScale; cx+=5){
                 let idx = (cy * mapScale + cx) * 4;
                 if(collisionPixels[idx] > 128) {
-                    // 회전축(중심)을 기준으로 정확한 로컬 좌표를 구합니다.
-                    let rx = (cx - (mapScale/2)) / COLLISION_SCALE; 
-                    let ry = (cy - (mapScale/2)) / COLLISION_SCALE; 
-                    
-                    let x3D = rx * 0.1;
-                    let z3D = -ry * 0.1;
+                    // 2D 스캔 데이터의 실제 위치 (회전하지 않은 원본)
+                    let x3D = (cx - 400); 
+                    let z3D = -(cy - 400); 
 
-                    // 이중 회전 문제를 해결하기 위해 여기서 회전시키지 않고 위치만 잡습니다.
-                    let m = BABYLON.Matrix.Translation(x3D, 7.5, z3D); // 바닥에 완벽히 붙이기 위한 Y=7.5
+                    // 바닥(0)부터 15의 높이를 가지도록 중심을 7.5에 둡니다.
+                    let m = BABYLON.Matrix.Translation(x3D, 7.5, z3D); 
                     for(let i=0; i<16; i++) matrices.push(m.m[i]);
                 }
             }
         }
         if(matrices.length > 0) truthBaseBox.thinInstanceSetBuffer("matrix", new Float32Array(matrices), 16);
+        
+        // ✨ 이중 회전의 늪에서 벗어나, 여기서 딱 한 번만 정방향으로 회전시킵니다.
+        truthBaseBox.rotation.y = serverWorld.angle;
     }
 
     // ==========================================
-    // 2D 원형 레이더(미니맵) 복원
+    // 빛의 섭리를 따르는 원형 미니맵
     // ==========================================
     function drawMinimap() {
         let mm = document.getElementById('minimap');
@@ -446,9 +452,19 @@
         ctx.clearRect(0, 0, mmSize*2, mmSize*2);
         ctx.save(); ctx.translate(mmSize, mmSize);
 
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = "rgba(0, 0, 0, 1)"; ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
+        // 1. 미니맵 바닥 (어두운 회색)
+        ctx.fillStyle = "#050508"; 
+        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
+        // 2. 항상 존재하는 요소들 그리기 (기호)
+        stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); });
+
+        // 3. 완벽한 칠흑으로 모두 덮어버림
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = "rgba(0, 0, 0, 0.95)"; 
+        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
+
+        // 4. 빛이 있는 곳만 투명하게 구멍 뚫기
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = "white";
 
@@ -468,9 +484,8 @@
             });
         }
 
+        // 5. 시야 구멍 위로 자신과 동료 탐험가를 그림
         ctx.globalCompositeOperation = 'source-over';
-        stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); });
-
         ctx.fillStyle = "#ffcc00"; ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2); ctx.fill();
         for (let id in serverWorld.players) {
             if (id === socket.id) continue; let op = serverWorld.players[id];
@@ -494,7 +509,7 @@
 
       playerTrailParticle.emitRate = isMoving ? 50 : 0;
 
-      // 충전 판정 구역 (좁은 기둥 근처)
+      // 충전 판정 구역 축소 (반경 100)
       stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 100) battery = Math.min(100, battery + 1.5); });
       
       // 홀로그램 회전 및 부유 효과
@@ -514,10 +529,10 @@
       bLantern.intensity = lanternOn ? 15 * flicker : 0;
       bLantern.angle = currentFov; // 아이템 획득 시 넓어진 시야각 반영
       
-      // ✨ 여기서 거대한 진실 제단을 통째로 회전시킵니다. (물리벽과 완벽히 일치)
-      truthBaseBox.rotation.y = -serverWorld.angle;
+      // 진실 회전 (단 한 번, 정확한 축으로)
+      truthBaseBox.rotation.y = serverWorld.angle;
 
-      // 잃어버린 유물 (노란색 아이템 - 배터리 및 시야) 복원
+      // 노란색 아이템 (배터리 및 시야)
       if(serverWorld.items) {
           for(let i=0; i<serverWorld.items.length; i++) {
               let item = serverWorld.items[i];
@@ -538,7 +553,7 @@
           });
       }
 
-      // 형광물질 수집 복원
+      // 형광물질 아이템
       if(serverWorld.fItems) {
           serverWorld.fItems.forEach(fi => {
               if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
