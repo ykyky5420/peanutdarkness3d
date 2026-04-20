@@ -61,7 +61,6 @@
     .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
-    /* 뚜렷하게 독립된 2D 원형 미니맵 캔버스 */
     #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; background: #0a0a0f; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
   </style>
 </head>
@@ -138,6 +137,7 @@
     const playerSpeed = 7; const playerRadius = 12;
     let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
+    let isMoving = false;
     
     const stRadius = 3200;
     const stations2D = [
@@ -157,16 +157,14 @@
 
     function showSysMsg(text) {
         let container = document.getElementById('sys-msg-container');
-        let div = document.createElement('div');
-        div.className = 'sys-msg'; div.innerText = text;
-        container.appendChild(div);
-        setTimeout(() => div.remove(), 3000);
+        let div = document.createElement('div'); div.className = 'sys-msg'; div.innerText = text;
+        container.appendChild(div); setTimeout(() => div.remove(), 3000);
     }
 
     socket.on('worldUpdate', (worldData) => {
         if (serverWorld.targetWord !== worldData.targetWord) {
             initCollisionLayer(worldData.targetWord); 
-            updateTruthVoxel(); // 충돌 데이터에서 직접 3D 블록 조립
+            updateTruthVoxel(); // 글자가 바뀔 때만 3D 블록 조립
         }
         serverWorld = worldData;
     });
@@ -191,8 +189,7 @@
         ['mobile-ui','chat-ui','answer-ui','info-ui','minimap'].forEach(id => document.getElementById(id).style.display = 'none');
         document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
         document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
-        document.getElementById('game-over-ui').style.display = 'flex';
-        document.body.style.cursor = 'auto';
+        document.getElementById('game-over-ui').style.display = 'flex'; document.body.style.cursor = 'auto';
     });
 
     function submitAnswer() {
@@ -219,7 +216,9 @@
       canvas.focus(); document.body.style.cursor = 'none';
     }
 
-    // 2D 충돌 처리 (3D 복셀과 완벽히 연동됨)
+    // ==========================================
+    // 2D 충돌 처리 (회전 오차 완전 해결)
+    // ==========================================
     let collisionPixels;
     function initCollisionLayer(word) {
         let colCanvas = document.getElementById('colCanvas');
@@ -235,6 +234,7 @@
     function isColliding(x, y) {
       if(!collisionPixels) return false;
       let rx = x - MAP_CENTER; let ry = y - MAP_CENTER;
+      // 2D 회전 공식을 정확하게 유지합니다
       let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
       let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
       let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
@@ -242,18 +242,11 @@
       return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4] > 128; 
     }
 
-    function resolveCollision() {
-      if (!isColliding(playerX, playerY)) return; 
-      let found = false;
-      for (let r = 2; r < 200; r += 5) { 
-        for (let theta = 0; theta < Math.PI*2; theta += Math.PI / 8) {
-          let tx = playerX + r * Math.cos(theta); let ty = playerY + r * Math.sin(theta);
-          if (!isColliding(tx, ty) && dist(tx, ty, MAP_CENTER, MAP_CENTER) < MAP_RADIUS - playerRadius) {
-            playerX = tx; playerY = ty; found = true; break;
-          }
-        }
-        if (found) break;
-      }
+    // 부드러운 벽 슬라이딩 처리
+    function resolveCollision(dx, dy) {
+      let nx = playerX + dx; let ny = playerY + dy;
+      if (!isColliding(nx, playerY)) playerX = nx;
+      if (!isColliding(playerX, ny)) playerY = ny;
     }
 
     // 조작 로직
@@ -269,7 +262,7 @@
       if (!e.repeat) activeKeys[k] = true;
     });
     window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
-    window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; });
+    window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; isMoving = false; });
 
     let joyZone = document.getElementById('joystick-zone'); let joyKnob = document.getElementById('joystick-knob');
     let joyActive = false; let joyTouchId = null;
@@ -282,11 +275,7 @@
         joyDx = dx / maxDist; joyDy = dy / maxDist;
     }
     function stopJoystick(e) {
-        if (joyActive) {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = `translate(-50%, -50%)`; break; }
-            }
-        }
+        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = `translate(-50%, -50%)`; break; } } }
     }
     joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); if (!joyActive) { let t = e.changedTouches[0]; joyActive = true; joyTouchId = t.identifier; updateJoystick(t); }}, {passive: false});
     joyZone.addEventListener('touchmove', (e) => { e.preventDefault(); if (joyActive) { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }}}, {passive: false});
@@ -306,14 +295,14 @@
           if (activeKeys['arrowdown'] || activeKeys['s'] || activeKeys['ㄴ']) dy += playerSpeed;
       }
       
-      if (dx !== 0 || dy !== 0) targetDir = Math.atan2(dy, dx);
+      isMoving = (dx !== 0 || dy !== 0);
+      if (isMoving) targetDir = Math.atan2(dy, dx);
       let diff = targetDir - playerDir;
       while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
       playerDir += diff * 0.15;
       
-      let nx = playerX + dx; let ny = playerY + dy;
-      if (!isColliding(nx, playerY)) playerX = nx;
-      if (!isColliding(playerX, ny)) playerY = ny;
+      // 밀어내는 대신 부드럽게 벽을 타고 흐르는(Sliding) 충돌 해결
+      resolveCollision(dx, dy);
 
       if (dist(playerX, playerY, MAP_CENTER, MAP_CENTER) > MAP_RADIUS + 15) {
         let a = Math.atan2(playerY - MAP_CENTER, playerX - MAP_CENTER);
@@ -326,27 +315,24 @@
     // 3D 세계 창조 (바빌론.js)
     // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle;
-    let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {} };
+    let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
+    let stations3D = [];
 
+    // 2D -> 3D 변환 스케일
     function to3Dx(val) { return (val - MAP_CENTER) * 0.1; } 
     function to3Dz(val) { return -(val - MAP_CENTER) * 0.1; } 
 
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
-        
-        // 빛이 없는 곳은 100% 칠흑
-        scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
-        scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
+        scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
-        // 일관된 탑다운 카메라 (절대 회전하지 않음)
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
         bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 10, 0), new BABYLON.Vector3(0, -0.5, 1), Math.PI / 2.5, 2, scene);
-        bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7);
-        bLantern.intensity = 15; 
+        bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7); bLantern.intensity = 15; 
 
-        // 빛이 닿을 때만 드러나는 움직임 확인용 바둑판 질감(Grid)
+        // 빛이 닿을 때만 드러나는 바둑판 바닥
         const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_SIZE*0.1, height: MAP_SIZE*0.1}, scene);
         let groundTex = new BABYLON.DynamicTexture("groundTex", {width: 256, height: 256}, scene, false);
         let gCtx = groundTex.getContext();
@@ -354,66 +340,60 @@
         gCtx.strokeStyle = "#11111a"; gCtx.lineWidth = 2;
         gCtx.beginPath(); gCtx.moveTo(0,0); gCtx.lineTo(0,256); gCtx.stroke();
         gCtx.beginPath(); gCtx.moveTo(0,0); gCtx.lineTo(256,0); gCtx.stroke();
-        groundTex.update();
-        groundTex.uScale = MAP_SIZE * 0.1 / 10; 
-        groundTex.vScale = MAP_SIZE * 0.1 / 10;
+        groundTex.update(); groundTex.uScale = MAP_SIZE * 0.1 / 10; groundTex.vScale = MAP_SIZE * 0.1 / 10;
         
         const gMat = new BABYLON.StandardMaterial("gMat", scene);
-        gMat.diffuseTexture = groundTex;
-        gMat.specularColor = new BABYLON.Color3(0,0,0); 
-        gMat.emissiveColor = new BABYLON.Color3(0,0,0); // 자체 발광 제거
-        gMat.maxSimultaneousLights = 24; 
-        ground.material = gMat;
+        gMat.diffuseTexture = groundTex; gMat.specularColor = new BABYLON.Color3(0,0,0); gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
+        gMat.maxSimultaneousLights = 24; ground.material = gMat;
 
         const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
         const bMat = new BABYLON.StandardMaterial("bMat", scene);
-        bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5;
-        border.material = bMat; border.position.y = 1;
+        bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5; border.material = bMat; border.position.y = 1;
 
-        // Voxel(입체 블록) 생성기
+        // ✨ 3D 입체 진실 (바닥에 박힌 거대한 블록)
         truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 4, height: 15, depth: 4}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.2); 
-        tMat.diffuseColor = new BABYLON.Color3(0.5, 0.4, 0.1);
+        tMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.2); tMat.diffuseColor = new BABYLON.Color3(0.5, 0.4, 0.1);
         truthBaseBox.material = tMat;
 
         bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
         let pMat = new BABYLON.StandardMaterial("pMat", scene);
-        pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); 
-        pMat.disableLighting = true; 
-        bPlayer.material = pMat;
-        bPlayer.position.y = 1.5;
+        pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); pMat.disableLighting = true; bPlayer.material = pMat; bPlayer.position.y = 1.5;
 
-        // 사방팔방 온전히 흩어지는 파티클 꼬리
+        // 모든 방향에 예쁘게 반응하는 꼬리 입자
         playerTrailParticle = new BABYLON.ParticleSystem("trail", 500, scene);
-        let ptTex = new BABYLON.DynamicTexture("pt", 64, scene);
-        let ptCtx = ptTex.getContext();
+        let ptTex = new BABYLON.DynamicTexture("pt", 64, scene); let ptCtx = ptTex.getContext();
         ptCtx.beginPath(); ptCtx.arc(32, 32, 30, 0, Math.PI*2);
         let grd = ptCtx.createRadialGradient(32,32,0, 32,32,30);
         grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(1, "rgba(255,255,255,0)");
         ptCtx.fillStyle = grd; ptCtx.fill(); ptTex.update();
-        
-        playerTrailParticle.particleTexture = ptTex;
-        playerTrailParticle.emitter = bPlayer;
-        playerTrailParticle.minLifeTime = 0.5; playerTrailParticle.maxLifeTime = 1.0;
-        playerTrailParticle.emitRate = 0;
+        playerTrailParticle.particleTexture = ptTex; playerTrailParticle.emitter = bPlayer;
+        playerTrailParticle.minLifeTime = 0.5; playerTrailParticle.maxLifeTime = 1.0; playerTrailParticle.emitRate = 0;
         playerTrailParticle.minSize = 1; playerTrailParticle.maxSize = 2.5;
-        playerTrailParticle.color1 = new BABYLON.Color4(1, 0.8, 0.2, 0.8);
-        playerTrailParticle.color2 = new BABYLON.Color4(1, 0.4, 0, 0.2);
-        playerTrailParticle.colorDead = new BABYLON.Color4(0, 0, 0, 0);
+        playerTrailParticle.color1 = new BABYLON.Color4(1, 0.8, 0.2, 0.8); playerTrailParticle.color2 = new BABYLON.Color4(1, 0.4, 0, 0.2); playerTrailParticle.colorDead = new BABYLON.Color4(0, 0, 0, 0);
         playerTrailParticle.start();
 
-        // 좁아진 안식처 (충전소)
+        // ✨ 안식처 (신비로운 홀로그램 실린더 이펙트 추가)
         stations2D.forEach((s, i) => {
             let cx = to3Dx(s.x); let cz = to3Dz(s.y);
-            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: 20}, scene);
+            // 안쪽 불투명 기둥
+            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: 10}, scene);
             cyl.position = new BABYLON.Vector3(cx, 10, cz);
             let cMat = new BABYLON.StandardMaterial("cMat", scene);
-            cMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3); cMat.alpha = 0.15; cMat.disableLighting = true;
+            cMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3); cMat.alpha = 0.4; cMat.disableLighting = true;
             cyl.material = cMat;
+            
+            // 바깥쪽 회전하는 반투명 홀로그램 기둥
+            let halo = BABYLON.MeshBuilder.CreateCylinder("stHalo"+i, {height: 25, diameter: 15}, scene);
+            halo.position = new BABYLON.Vector3(cx, 12.5, cz);
+            let hMat = new BABYLON.StandardMaterial("hMat", scene);
+            hMat.emissiveColor = new BABYLON.Color3(0, 1, 0.5); hMat.alpha = 0.1; hMat.wireframe = true; hMat.disableLighting = true;
+            halo.material = hMat;
             
             let sLight = new BABYLON.PointLight("sl"+i, new BABYLON.Vector3(cx, 5, cz), scene);
             sLight.diffuse = new BABYLON.Color3(0, 1, 0.5); sLight.intensity = 3;
+
+            stations3D.push({ mesh: cyl, halo: halo });
         });
 
         return scene;
@@ -421,16 +401,27 @@
 
     bScene = createScene();
 
-    // ✨ 2D 충돌 배열을 그대로 3D 블록으로 번역 (투명한 벽 100% 일치)
+    // ✨ 2D 충돌 배열과 완벽하게 일치하는 축으로 3D 블록(Voxel) 생성
     function updateTruthVoxel() {
         if(!collisionPixels) return;
         let matrices = [];
-        // 5픽셀 단위로 스캔하여 블록(Voxel) 조립 (성능과 밀도 최적화)
-        for(let cy=0; cy<800; cy+=5){
-            for(let cx=0; cx<800; cx+=5){
-                let idx = (cy * 800 + cx) * 4;
+        // 2D 충돌 스케일과 동일하게 반복하며 오차를 없앱니다.
+        let mapScale = MAP_SIZE * COLLISION_SCALE;
+        let blockSize = 1 / COLLISION_SCALE * 0.1; // 2D 1픽셀이 3D에서 차지하는 크기
+
+        for(let cy=0; cy<mapScale; cy+=5){ // 최적화를 위해 5픽셀 단위 스킵
+            for(let cx=0; cx<mapScale; cx+=5){
+                let idx = (cy * mapScale + cx) * 4;
                 if(collisionPixels[idx] > 128) {
-                    let m = BABYLON.Matrix.Translation(cx - 400, 7.5, -(cy - 400));
+                    // 회전의 중심축(MAP_CENTER)을 기준으로 정확히 위치 계산
+                    let rx = (cx / COLLISION_SCALE) - MAP_CENTER;
+                    let ry = (cy / COLLISION_SCALE) - MAP_CENTER;
+                    
+                    let x3D = rx * 0.1;
+                    let z3D = -ry * 0.1;
+
+                    let m = BABYLON.Matrix.Translation(x3D, 7.5, z3D); // 바닥에 붙게 (높이 15의 절반)
+                    // 서버에서 오는 angle값 그대로 회전 적용
                     let rot = BABYLON.Matrix.RotationY(-serverWorld.angle);
                     let finalM = m.multiply(rot);
                     for(let i=0; i<16; i++) matrices.push(finalM.m[i]);
@@ -441,72 +432,47 @@
     }
 
     // ==========================================
-    // 2D 캔버스 원형 레이더(미니맵) 복원
+    // 2D 원형 레이더(미니맵) 완벽 분리 부활
     // ==========================================
     function drawMinimap() {
         let mm = document.getElementById('minimap');
         let ctx = mm.getContext('2d');
-        let mmSize = 110; 
-        let scale = mmSize / MAP_RADIUS; 
+        let mmSize = 110; let scale = mmSize / MAP_RADIUS; 
         
         ctx.clearRect(0, 0, mmSize*2, mmSize*2);
-        ctx.save();
-        ctx.translate(mmSize, mmSize);
+        ctx.save(); ctx.translate(mmSize, mmSize);
 
-        // 칠흑 장막
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = "rgba(0, 0, 0, 1)";
-        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
+        ctx.fillStyle = "rgba(0, 0, 0, 1)"; ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
-        // 시야 구멍 뚫기
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = "white";
 
-        let ox = (playerX - MAP_CENTER) * scale;
-        let oy = (playerY - MAP_CENTER) * scale;
-
+        let ox = (playerX - MAP_CENTER) * scale; let oy = (playerY - MAP_CENTER) * scale;
         if (lanternOn) {
-            let fov = Math.PI / 1.5;
-            let radius = 900 * scale; 
-            ctx.beginPath(); ctx.moveTo(ox, oy);
-            ctx.arc(ox, oy, radius, playerDir - fov/2, playerDir + fov/2);
-            ctx.fill();
+            let fov = Math.PI / 1.5; let radius = 900 * scale; 
+            ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, radius, playerDir - fov/2, playerDir + fov/2); ctx.fill();
         }
         ctx.beginPath(); ctx.arc(ox, oy, 55 * scale, 0, Math.PI*2); ctx.fill();
 
-        stations2D.forEach(s => {
-            let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale;
-            ctx.beginPath(); ctx.arc(sx, sy, 350 * scale, 0, Math.PI*2); ctx.fill();
-        });
+        stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.beginPath(); ctx.arc(sx, sy, 350 * scale, 0, Math.PI*2); ctx.fill(); });
 
         if(serverWorld.meteors) {
             serverWorld.meteors.forEach(m => {
-                let age = serverWorld.serverTime - m.startTime;
-                let mRad = mapVal(age, 0, m.duration, 800, 0) * scale;
-                if(mRad > 0) {
-                    let mx = (m.x - MAP_CENTER) * scale; let my = (m.y - MAP_CENTER) * scale;
-                    ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill();
-                }
+                let age = serverWorld.serverTime - m.startTime; let mRad = mapVal(age, 0, m.duration, 800, 0) * scale;
+                if(mRad > 0) { let mx = (m.x - MAP_CENTER) * scale; let my = (m.y - MAP_CENTER) * scale; ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill(); }
             });
         }
 
-        // 아이콘 그리기
         ctx.globalCompositeOperation = 'source-over';
-        stations2D.forEach(s => {
-            let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale;
-            ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-            ctx.fillText("⚡", sx, sy);
-        });
+        stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); });
 
         ctx.fillStyle = "#ffcc00"; ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2); ctx.fill();
-        
         for (let id in serverWorld.players) {
-            if (id === socket.id) continue;
-            let op = serverWorld.players[id];
+            if (id === socket.id) continue; let op = serverWorld.players[id];
             let opx = (op.x - MAP_CENTER) * scale; let opy = (op.y - MAP_CENTER) * scale;
             ctx.fillStyle = op.color || "white"; ctx.beginPath(); ctx.arc(opx, opy, 4, 0, Math.PI*2); ctx.fill();
         }
-
         ctx.restore();
     }
 
@@ -519,16 +485,19 @@
       if (lanternOn) { battery -= batteryDrain; if (battery < 0) battery = 0; }
       if (battery <= 0) lanternOn = false;
       
-      let oldX = playerX, oldY = playerY;
-      handleInput(); resolveCollision();
+      handleInput(); 
       socket.emit('move', { x: playerX, y: playerY, dir: playerDir, lantern: lanternOn });
 
-      // 이동 거리 측정으로 꼬리(Particle) 활성화
-      let movedDist = dist(oldX, oldY, playerX, playerY);
-      playerTrailParticle.emitRate = (movedDist > 0.1) ? 50 : 0;
+      playerTrailParticle.emitRate = isMoving ? 50 : 0;
 
-      // 충전 구역 판정 (100 반경)
+      // 충전 판정 구역 축소 (반경 100)
       stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 100) battery = Math.min(100, battery + 1.5); });
+      // 충전소 홀로그램 회전 및 부유 효과
+      let timeOffset = Date.now() * 0.001;
+      stations3D.forEach((st, i) => {
+          st.halo.rotation.y += 0.01;
+          st.halo.position.y = 12.5 + Math.sin(timeOffset + i) * 2;
+      });
 
       let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
       bPlayer.position.x = px3; bPlayer.position.z = pz3;
@@ -539,7 +508,18 @@
       bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.5, -Math.sin(playerDir));
       bLantern.intensity = lanternOn ? 15 * flicker : 0;
       
-      truthBaseBox.rotation.y = -serverWorld.angle;
+      // ✨ 복원된 아이템 수집 판정
+      if(serverWorld.items) {
+          for(let i=0; i<serverWorld.items.length; i++) {
+              let item = serverWorld.items[i];
+              if(item.active && dist(playerX, playerY, item.x, item.y) < 50) { socket.emit('collectItem', i); }
+          }
+      }
+      if(serverWorld.fItems) {
+          serverWorld.fItems.forEach(fi => {
+              if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
+          });
+      }
 
       // 동료 탐험가
       for (let id in serverWorld.players) {
@@ -548,9 +528,7 @@
         if (!meshDict.players[id]) {
             let m = BABYLON.MeshBuilder.CreateSphere("p_"+id, {diameter: 3}, bScene);
             let mat = new BABYLON.StandardMaterial("pm_"+id, bScene);
-            mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true;
-            m.material = mat; m.position.y = 1.5;
-            
+            mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true; m.material = mat; m.position.y = 1.5;
             let l = new BABYLON.SpotLight("pl_"+id, BABYLON.Vector3.Zero(), BABYLON.Vector3.Zero(), Math.PI/2.5, 2, bScene);
             l.diffuse = BABYLON.Color3.FromHexString(p.color || "#ffffff");
             meshDict.players[id] = { mesh: m, light: l };
@@ -561,34 +539,63 @@
         meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.5, -Math.sin(p.dir));
         meshDict.players[id].light.intensity = p.lantern ? 10 : 0;
       }
-      for(let id in meshDict.players) { 
-          if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } 
+      for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
+
+      // 아이템 (배터리 조각) 동기화
+      if(serverWorld.items) {
+          serverWorld.items.forEach((item, i) => {
+             if(item.active) {
+                 if(!meshDict.items[i]) {
+                     let im = BABYLON.MeshBuilder.CreateSphere("it_"+i, {diameter: 2}, bScene);
+                     let imat = new BABYLON.StandardMaterial("itm_"+i, bScene);
+                     imat.emissiveColor = new BABYLON.Color3(1, 0.8, 0); imat.disableLighting = true; im.material = imat;
+                     meshDict.items[i] = im;
+                 }
+                 meshDict.items[i].position = new BABYLON.Vector3(to3Dx(item.x), 2 + Math.sin(timeOffset*2 + i), to3Dz(item.y)); // 둥둥 떠다님
+             } else {
+                 if(meshDict.items[i]) { meshDict.items[i].dispose(); delete meshDict.items[i]; }
+             }
+          });
       }
 
-      // 망령
+      // 형광물질 아이템 동기화
+      if(serverWorld.fItems) {
+          serverWorld.fItems.forEach(fi => {
+              if(!meshDict.fItems[fi.id]) {
+                  let fm = BABYLON.MeshBuilder.CreateBox("fit_"+fi.id, {size: 1.5}, bScene);
+                  let fmat = new BABYLON.StandardMaterial("fitm_"+fi.id, bScene);
+                  fmat.emissiveColor = new BABYLON.Color3(0, 1, 1); fmat.disableLighting = true; fm.material = fmat;
+                  meshDict.fItems[fi.id] = fm;
+              }
+              meshDict.fItems[fi.id].position = new BABYLON.Vector3(to3Dx(fi.x), 2 + Math.cos(timeOffset*2 + fi.x), to3Dz(fi.y));
+              meshDict.fItems[fi.id].rotation.x += 0.02; meshDict.fItems[fi.id].rotation.y += 0.02; // 빙글빙글 회전
+          });
+      }
+      for(let key in meshDict.fItems) {
+          if(!serverWorld.fItems || !serverWorld.fItems.find(f => f.id.toString() === key)) { meshDict.fItems[key].dispose(); delete meshDict.fItems[key]; }
+      }
+
+      // 망령 동기화
       serverWorld.enemies.forEach((e, i) => {
         if (!e.active) { if(meshDict.enemies[i]) { meshDict.enemies[i].mesh.dispose(); delete meshDict.enemies[i]; } return; }
         if (dist(playerX, playerY, e.x, e.y) < playerRadius + 15) { battery -= 5; if(battery<0) battery=0; }
-        
         if (!meshDict.enemies[i]) {
             let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 6}, bScene);
             let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
             mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
-            m.material = mat; m.position.y = 3;
-            meshDict.enemies[i] = { mesh: m };
+            m.material = mat; m.position.y = 3; meshDict.enemies[i] = { mesh: m };
         }
         meshDict.enemies[i].mesh.position.x = to3Dx(e.x); meshDict.enemies[i].mesh.position.z = to3Dz(e.y);
       });
 
-      // 유성우
+      // 유성우 동기화
       if(serverWorld.meteors) {
           serverWorld.meteors.forEach((m, i) => {
              let age = serverWorld.serverTime - m.startTime;
              if (age > m.duration) return;
              if(!meshDict.meteors[m.startTime]) {
                  let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3Dx(m.x), 20, to3Dz(m.y)), bScene);
-                 ml.diffuse = new BABYLON.Color3(1, 0.6, 0.2);
-                 meshDict.meteors[m.startTime] = { light: ml };
+                 ml.diffuse = new BABYLON.Color3(1, 0.6, 0.2); meshDict.meteors[m.startTime] = { light: ml };
              }
              meshDict.meteors[m.startTime].light.intensity = mapVal(age, 0, m.duration, 50, 0); 
           });
@@ -598,24 +605,21 @@
           if(!found) { meshDict.meteors[key].light.dispose(); delete meshDict.meteors[key]; }
       }
 
-      // 형광물질
+      // 형광물질 표시 동기화
       if(serverWorld.fMarks) {
           serverWorld.fMarks.forEach(mk => {
               if(!meshDict.fMarks[mk.id]) {
                   let fml = new BABYLON.PointLight("fml_"+mk.id, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
-                  fml.diffuse = new BABYLON.Color3(0, 1, 1); fml.intensity = 8;
-                  meshDict.fMarks[mk.id] = { light: fml };
+                  fml.diffuse = new BABYLON.Color3(0, 1, 1); fml.intensity = 8; meshDict.fMarks[mk.id] = { light: fml };
               }
           });
       }
 
       // UI 및 렌더링
-      let pCount = Object.keys(serverWorld.players).length;
-      let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
+      let pCount = Object.keys(serverWorld.players).length; let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
       document.getElementById('room-info').innerText = `방: ${myRoom} | 현재 탐험가: ${pCount}명`;
       let bBar = document.getElementById('battery-bar');
-      bBar.style.width = battery + '%';
-      bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
+      bBar.style.width = battery + '%'; bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
       document.getElementById('lantern-info').innerText = lanternOn ? "랜턴 켜짐 (Z키: 끄기)" : "랜턴 꺼짐 (Z키: 켜기)";
       document.getElementById('fitem-info').innerText = `형광물질 (X키: 붓칠): ${fCount}개`;
       document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${((serverWorld.serverTime - (serverWorld.gameStartTime || serverWorld.serverTime))/1000).toFixed(1)}초`;
