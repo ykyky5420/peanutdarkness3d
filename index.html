@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Peanut Darkness 3D - 영원의 기록과 빛</title>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* 화면 떨림 방지 및 UI 스타일 (기존과 동일) */
+    body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+    input { user-select: auto; -webkit-user-select: auto; }
+    #renderCanvas { width: 100vw; height: 100vh; outline: none; }
+    
+    @keyframes titleGlow { 0% { text-shadow: 0 0 10px rgba(212, 160, 23, 0.2); } 50% { text-shadow: 0 0 30px rgba(212, 160, 23, 0.8), 0 0 60px rgba(212, 160, 23, 0.5); } 100% { text-shadow: 0 0 10px rgba(212, 160, 23, 0.2); } }
+    .ui-container { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 15px; color: white; background: rgba(10, 10, 15, 0.95); padding: 50px; border-radius: 20px; border: 1px solid #333; z-index: 10; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+    h1 { font-size: 55px; color: #d4a017; margin: 0 0 35px 0; letter-spacing: 10px; animation: titleGlow 3s ease-in-out infinite alternate; }
+    
+    .input-group { display: flex; flex-direction: column; width: 280px; gap: 8px; }
+    .input-group label { font-size: 14px; color: #888; margin-left: 5px; }
+    input { padding: 14px; border-radius: 10px; border: 1px solid #444; background: #111; color: white; font-size: 16px; width: 100%; box-sizing: border-box; text-align: center;}
+    
+    .name-gen-box { display: flex; gap: 5px; width: 100%; }
+    .name-gen-box input { flex-grow: 1; }
+    .name-gen-box button { margin: 0; padding: 0 15px; width: auto; font-size: 20px; border-radius: 10px; background: #333; color: #d4a017; border: 1px solid #444; cursor: pointer; transition: 0.3s; }
+    .name-gen-box button:hover { background: #444; color: #ffcc33; }
+    .btn-start { background: #d4a017; color: #000; font-weight: bold; padding: 18px 45px; border-radius: 10px; border: none; font-size: 20px; cursor: pointer; margin-top: 20px; width: 280px; }
+    .btn-start:hover { background: #ffcc33; transform: scale(1.02); }
+    
+    #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
+    .answer-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; z-index: 20; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 50px; border: 1px solid #d4a017; }
+    .answer-container input { padding: 8px 20px; border-radius: 20px; border: none; background: #111; color: white; width: 150px; text-align: center; }
+    .answer-container button { padding: 8px 20px; margin-top: 0; width: auto; font-size: 14px; border-radius: 20px; background: #d4a017; color: black; font-weight:bold; cursor:pointer; border:none;}
+    
+    #mobile-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
+    .action-btn { position: absolute; width: 65px; height: 65px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4); color: white; font-size: 22px; font-weight: bold; display: flex; justify-content: center; align-items: center; pointer-events: auto; touch-action: none; user-select: none; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+    .action-btn:active { background: rgba(255,255,255,0.6); color: black; }
+    .joystick-knob { position: absolute; top: 50%; left: 50%; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.3); transform: translate(-50%, -50%); pointer-events: none; }
+    .joystick-zone { position: absolute; bottom: 55px; left: 30px; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); pointer-events: auto; touch-action: none; }
+    .btn-z { bottom: 55px; right: 110px; }
+    .btn-x { bottom: 135px; right: 30px; }
+    .fs-btn { position: absolute; top: 20px; right: 20px; width: 50px; height: 50px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; font-size: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 110; pointer-events: auto; transition: 0.2s; }
+    .fs-btn:active { background: rgba(255,255,255,0.4); }
+
+    #chat-ui { position: absolute; top: 280px; right: 30px; width: 220px; height: 300px; display: none; flex-direction: column; gap: 5px; z-index: 45; }
+    #chat-messages { flex-grow: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; font-size: 13px; color: #eee; display: flex; flex-direction: column; gap: 4px; scrollbar-width: none; }
+    #chat-messages::-webkit-scrollbar { display: none; }
+    #chat-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; padding: 8px; color: white; font-size: 13px; outline: none; }
+    #chat-input:focus { background: rgba(255,255,255,0.2); }
+    .chat-msg { line-height: 1.4; word-break: break-all; }
+    .chat-sender { font-weight: bold; margin-right: 4px; }
+  
+    #game-over-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 10, 0.95); z-index: 100; flex-direction: column; justify-content: center; align-items: center; gap: 20px; color: white; text-align: center; }
+    .go-title { font-size: 50px; color: #d4a017; letter-spacing: 5px; text-shadow: 0 0 20px rgba(212, 160, 23, 0.5); margin-bottom: 10px; }
+    .go-desc { font-size: 22px; color: #ddd; line-height: 1.8; }
+    .go-record { font-size: 20px; color: #00FFFF; margin-top: 15px; font-weight: bold; }
+    .btn-return { background: #222; color: #d4a017; padding: 15px 40px; font-size: 18px; border-radius: 10px; border: 1px solid #d4a017; cursor: pointer; margin-top: 40px; transition: 0.3s; }
+    .btn-return:hover { background: #d4a017; color: black; transform: scale(1.05); }
+
+    /* 화면 상단 정보 UI */
+    #info-ui { position: absolute; top: 20px; left: 20px; color: white; z-index: 40; display: none; flex-direction: column; gap: 5px; text-shadow: 1px 1px 2px black; pointer-events: none;}
+    .battery-bar-container { width: 300px; height: 18px; background: rgba(30,30,30,0.8); border: 1px solid #666; border-radius: 5px; overflow: hidden; margin-top: 5px;}
+    #battery-bar { height: 100%; width: 100%; background: #00ff64; transition: width 0.1s, background-color 0.3s; }
+    #sys-msg-container { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 45; pointer-events: none; }
+    .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
+    @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+  </style>
+</head>
+<body>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="lobby-ui" class="ui-container">
+    <h1>Peanut Darkness 3D</h1>
+    <div class="input-group">
+      <label>방 코드</label>
+      <div class="name-gen-box"><input type="text" id="roomCode" maxlength="4"><button onclick="generateRandomRoomCode()">🔄</button></div>
+    </div>
+    <div class="input-group">
+      <label>탐험가 이름</label>
+      <div class="name-gen-box"><input type="text" id="pName"><button onclick="generateRandomName()">🔄</button></div>
+    </div>
+    <button class="btn-start" onclick="startGame()">어둠 속으로 뛰어들기</button>
+  </div>
+
+  <div id="info-ui">
+    <div id="room-info">방: ---- | 현재 탐험가: 1명</div>
+    <div class="battery-bar-container"><div id="battery-bar"></div></div>
+    <div id="lantern-info">랜턴 배터리 (Z키: 끄기)</div>
+    <div id="fitem-info" style="color: #00ffff;">형광물질 (X키: 붓칠): 0개</div>
+    <div id="time-info" style="color: #ffcc00;">⏱ 흐르는 시간: 0.0초</div>
+  </div>
+  <div id="sys-msg-container"></div>
+
+  <div id="mobile-ui">
+    <div class="fs-btn" onclick="toggleFullScreen()">⛶</div>
+    <div id="joystick-zone" class="joystick-zone"><div id="joystick-knob" class="joystick-knob"></div></div>
+    <div id="btn-z" class="action-btn btn-z">Z</div>
+    <div id="btn-x" class="action-btn btn-x">X</div>
+  </div>
+
+  <div id="chat-ui">
+    <div id="chat-messages"></div>
+    <div style="display: flex; gap: 5px;">
+      <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." onfocus="isChatting=true" onblur="isChatting=false" style="width: 100%;">
+      <button id="chat-send-btn">전송</button>
+    </div>
+  </div>
+
+  <div id="answer-ui" class="answer-container">
+    <input type="text" id="ansInput" placeholder="진실의 이름을 부르세요">
+    <button onclick="submitAnswer()">외치기</button>
+  </div>
+
+  <div id="game-over-ui">
+    <div class="go-title">진실이 밝혀졌습니다</div>
+    <div id="go-text" class="go-desc"></div>
+    <div id="go-record" class="go-record"></div>
+    <button class="btn-return" onclick="location.reload()">어둠 속으로 다시 흩어지기</button>
+  </div>
+
+  <canvas id="colCanvas" style="display:none;"></canvas>
+
+  <script>
+    // ==========================================
+    // 1. 기본 설정 및 수학 함수 (p5.js 독립)
+    // ==========================================
+    const socket = io();
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+    
+    let gameState = 'LOBBY';
+    let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
+    
+    const MAP_RADIUS = 4000; const MAP_CENTER = 4000; const MAP_SIZE = MAP_RADIUS * 2;
+    const COLLISION_SCALE = 0.1;
+    
+    let myRoom = ""; let isChatting = false;
+    let playerX = MAP_CENTER; let playerY = MAP_CENTER + MAP_RADIUS - 80; 
+    let playerDir = -Math.PI / 2; let targetDir = -Math.PI / 2;
+    const playerSpeed = 7; const playerRadius = 12;
+    let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
+    let trail = []; let stepToggle = 1; let lastStepDistance = 0;
+    let activeKeys = {}; let joyDx = 0; let joyDy = 0;
+    
+    const stRadius = 3200;
+    const stations2D = [
+      {x: MAP_CENTER + stRadius * Math.cos(-Math.PI/2), y: MAP_CENTER + stRadius * Math.sin(-Math.PI/2)},    
+      {x: MAP_CENTER + stRadius * Math.cos(Math.PI/6), y: MAP_CENTER + stRadius * Math.sin(Math.PI/6)},      
+      {x: MAP_CENTER + stRadius * Math.cos(5*Math.PI/6), y: MAP_CENTER + stRadius * Math.sin(5*Math.PI/6)}   
+    ];
+
+    // 수학 보조 함수
+    function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+    function mapVal(n, start1, stop1, start2, stop2) { return ((n - start1) / (stop1 - start1)) * (stop2 - start2) + start2; }
+
+    // 이름 생성기
+    const adjectives = ["활동적인", "조용한", "용감한", "소심한", "빛나는", "어두운", "지혜로운", "신비로운", "푸른", "붉은"];
+    const nouns = ["달팽이", "올빼미", "고양이", "늑대", "여우", "까마귀", "그림자", "별빛", "바람", "탐험가"];
+    function generateRandomRoomCode() { document.getElementById('roomCode').value = Math.floor(Math.random() * 9000 + 1000).toString(); }
+    function generateRandomName() { document.getElementById('pName').value = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`; }
+    window.onload = () => { generateRandomName(); generateRandomRoomCode(); };
+
+    // 시스템 메시지
+    function showSysMsg(text) {
+        let container = document.getElementById('sys-msg-container');
+        let div = document.createElement('div');
+        div.className = 'sys-msg'; div.innerText = text;
+        container.appendChild(div);
+        setTimeout(() => div.remove(), 3000);
+    }
+
+    // ==========================================
+    // 2. 소켓 통신망 (서버 연동)
+    // ==========================================
+    socket.on('worldUpdate', (worldData) => {
+        if (serverWorld.targetWord !== worldData.targetWord) {
+            initCollisionLayer(worldData.targetWord); // 단어가 바뀌면 충돌 레이어 갱신
+            updateTruthMesh(worldData.targetWord);    // 3D 텍스처 갱신
+        }
+        serverWorld = worldData;
+    });
+
+    socket.on('systemMessage', (msg) => showSysMsg(msg.text));
+    
+    socket.on('receiveChat', (data) => {
+      let msgBox = document.getElementById('chat-messages');
+      let msgDiv = document.createElement('div'); msgDiv.className = 'chat-msg';
+      msgDiv.innerHTML = `<span class="chat-sender" style="color:${data.color}">${data.sender}:</span><span>${data.text}</span>`;
+      msgBox.appendChild(msgDiv); msgBox.scrollTop = msgBox.scrollHeight;
+    });
+
+    function sendChatMessage() {
+      let input = document.getElementById('chat-input'); let val = input.value.trim();
+      if (val) { socket.emit('sendChat', val); input.value = ""; }
+    }
+    document.getElementById('chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+    document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
+
+    socket.on('gameEnd', (data) => {
+        gameState = 'GAME_OVER';
+        ['mobile-ui','chat-ui','answer-ui','info-ui'].forEach(id => document.getElementById(id).style.display = 'none');
+        document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
+        document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
+        document.getElementById('game-over-ui').style.display = 'flex';
+        document.body.style.cursor = 'auto';
+    });
+
+    function submitAnswer() {
+      let ans = document.getElementById('ansInput').value;
+      if(ans) { socket.emit('submitAnswer', ans); document.getElementById('ansInput').value = ""; }
+    }
+    socket.on('itemCollected', () => { battery = Math.min(100, battery + 10); });
+
+    function startGame() {
+      const name = document.getElementById('pName').value.trim();
+      const room = document.getElementById('roomCode').value.trim();
+      if(!name || !room) { alert("방 코드와 이름을 모두 입력해주세요."); return; }
+      
+      myRoom = room; socket.emit('join', { name: name, room: room });
+      gameState = 'PLAY';
+      
+      document.getElementById('lobby-ui').style.display = 'none';
+      document.getElementById('answer-ui').style.display = 'flex';
+      document.getElementById('info-ui').style.display = 'flex';
+      document.getElementById('chat-ui').style.display = 'flex';
+      if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.getElementById('mobile-ui').style.display = 'block';
+      
+      canvas.focus(); document.body.style.cursor = 'none';
+    }
+
+    // ==========================================
+    // 3. 2D 충돌 연산 엔진 (보이지 않는 곳에서 작동)
+    // ==========================================
+    let collisionPixels;
+    function initCollisionLayer(word) {
+        let colCanvas = document.getElementById('colCanvas');
+        colCanvas.width = MAP_SIZE * COLLISION_SCALE; colCanvas.height = MAP_SIZE * COLLISION_SCALE;
+        let ctx = colCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.fillStyle = "black"; ctx.fillRect(0, 0, colCanvas.width, colCanvas.height);
+        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `bold ${3500 * COLLISION_SCALE}px sans-serif`;
+        ctx.fillText(word, colCanvas.width / 2, colCanvas.height / 2);
+        collisionPixels = ctx.getImageData(0, 0, colCanvas.width, colCanvas.height).data;
+    }
+
+    function isColliding(x, y) {
+      if(!collisionPixels) return false;
+      let rx = x - MAP_CENTER; let ry = y - MAP_CENTER;
+      let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
+      let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
+      let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
+      if (cx < 0 || cx >= MAP_SIZE*COLLISION_SCALE || cy < 0 || cy >= MAP_SIZE*COLLISION_SCALE) return false;
+      return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4] > 128; 
+    }
+
+    function resolveCollision() {
+      if (!isColliding(playerX, playerY)) return; 
+      let found = false;
+      for (let r = 2; r < 200; r += 5) { 
+        for (let theta = 0; theta < Math.PI*2; theta += Math.PI / 8) {
+          let tx = playerX + r * Math.cos(theta); let ty = playerY + r * Math.sin(theta);
+          if (!isColliding(tx, ty) && dist(tx, ty, MAP_CENTER, MAP_CENTER) < MAP_RADIUS - playerRadius) {
+            playerX = tx; playerY = ty; found = true; break;
+          }
+        }
+        if (found) break;
+      }
+    }
+
+    // ==========================================
+    // 4. 입력 및 2D 이동 로직 (그대로 유지)
+    // ==========================================
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement.tagName === 'INPUT') return;
+      if (e.key === 'z' || e.key === 'Z') { lanternOn = !lanternOn; }
+      if (e.key === 'x' || e.key === 'X') {
+          let me = serverWorld.players[socket.id];
+          if (me && me.fCount > 0) socket.emit('useFluorescent', { x: playerX, y: playerY });
+          else showSysMsg('형광물질이 없습니다.');
+      }
+      if (!e.repeat) activeKeys[e.key.toLowerCase()] = true;
+    });
+    window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
+    window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; });
+
+    // 조이스틱 연동
+    let joyZone = document.getElementById('joystick-zone'); let joyKnob = document.getElementById('joystick-knob');
+    let joyActive = false; let joyTouchId = null;
+    function updateJoystick(touch) {
+        let rect = joyZone.getBoundingClientRect();
+        let dx = touch.clientX - (rect.left + rect.width / 2); let dy = touch.clientY - (rect.top + rect.height / 2);
+        let distance = Math.hypot(dx, dy); let maxDist = 60; 
+        if (distance > maxDist) { dx = (dx / distance) * maxDist; dy = (dy / distance) * maxDist; }
+        joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        joyDx = dx / maxDist; joyDy = dy / maxDist;
+    }
+    function stopJoystick(e) {
+        if (joyActive) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = `translate(-50%, -50%)`; break; }
+            }
+        }
+    }
+    joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); if (!joyActive) { let t = e.changedTouches[0]; joyActive = true; joyTouchId = t.identifier; updateJoystick(t); }}, {passive: false});
+    joyZone.addEventListener('touchmove', (e) => { e.preventDefault(); if (joyActive) { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }}}, {passive: false});
+    joyZone.addEventListener('touchend', stopJoystick); joyZone.addEventListener('touchcancel', stopJoystick);
+    document.getElementById('btn-z').addEventListener('touchstart', (e) => { e.preventDefault(); lanternOn = !lanternOn; }, {passive: false});
+    document.getElementById('btn-x').addEventListener('touchstart', (e) => { e.preventDefault(); let me = serverWorld.players[socket.id]; if (me && me.fCount > 0) socket.emit('useFluorescent', { x: playerX, y: playerY }); }, {passive: false});
+    function toggleFullScreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+
+    function handleInput() {
+      let dx = 0; let dy = 0; let ox = playerX; let oy = playerY;
+      if (joyDx !== 0 || joyDy !== 0) { dx = joyDx * playerSpeed; dy = joyDy * playerSpeed; } 
+      else {
+          if (activeKeys['arrowleft'] || activeKeys['a']) dx -= playerSpeed;
+          if (activeKeys['arrowright'] || activeKeys['d']) dx += playerSpeed;
+          if (activeKeys['arrowup'] || activeKeys['w']) dy -= playerSpeed;
+          if (activeKeys['arrowdown'] || activeKeys['s']) dy += playerSpeed;
+      }
+      if (dx !== 0 || dy !== 0) targetDir = Math.atan2(dy, dx);
+      let diff = targetDir - playerDir;
+      while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
+      playerDir += diff * 0.15;
+      
+      let nx = playerX + dx; let ny = playerY + dy;
+      if (!isColliding(nx, playerY)) playerX = nx;
+      if (!isColliding(playerX, ny)) playerY = ny;
+
+      if (dist(playerX, playerY, MAP_CENTER, MAP_CENTER) > MAP_RADIUS + 15) {
+        let a = Math.atan2(playerY - MAP_CENTER, playerX - MAP_CENTER);
+        playerX = MAP_CENTER + Math.cos(a + Math.PI) * (MAP_RADIUS - 15);
+        playerY = MAP_CENTER + Math.sin(a + Math.PI) * (MAP_RADIUS - 15);
+      }
+
+      let m = dist(ox, oy, playerX, playerY);
+      if (m > 0) {
+        lastStepDistance += m;
+        if (lastStepDistance > 35) {
+          lastStepDistance = 0; let pa = playerDir + (Math.PI / 2) * stepToggle;
+          socket.emit('footprint', { x: playerX + Math.cos(pa) * 8, y: playerY + Math.sin(pa) * 8, angle: playerDir });
+          stepToggle *= -1;
+        }
+      }
+    }
+
+    // ==========================================
+    // ✨ 5. 바빌론.js 3D 엔진 구성
+    // ==========================================
+    let bScene, bCamera, bPlayer, bLantern, bTruthPlane, truthDynamicTexture;
+    let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {} };
+
+    // 2D 좌표를 3D 평면(X,Z)으로 번역하는 마법
+    function to3D(val) { return (val - MAP_CENTER) * 0.1; } // 스케일을 10분의 1로 줄여 3D 최적화
+
+    const createScene = function () {
+        const scene = new BABYLON.Scene(engine);
+        scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); // 완벽한 칠흑
+        scene.ambientColor = new BABYLON.Color3(0, 0, 0);
+
+        // 관찰자 시점 (위에서 비스듬히 내려다봄)
+        bCamera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 3.5, 120, BABYLON.Vector3.Zero(), scene);
+        
+        // 탐험가의 3D 육신
+        bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
+        let pMat = new BABYLON.StandardMaterial("pMat", scene);
+        pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); // 황금빛
+        pMat.disableLighting = true; // 스스로 빛나므로 외부 빛 무시
+        bPlayer.material = pMat;
+        bPlayer.position.y = 1.5;
+
+        // 랜턴 (SpotLight)
+        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 10, 0), new BABYLON.Vector3(0, -0.5, 1), Math.PI / 2, 5, scene);
+        bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7);
+        bLantern.intensity = 1500; // 물리적 렌더링에 맞춘 강한 빛
+
+        // 바닥 (대지)
+        const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_SIZE*0.1, height: MAP_SIZE*0.1}, scene);
+        const gMat = new BABYLON.StandardMaterial("gMat", scene);
+        gMat.diffuseColor = new BABYLON.Color3(0.05, 0.05, 0.08); // 짙은 먹색 대지
+        gMat.specularColor = new BABYLON.Color3(0,0,0); // 반사광 제거
+        gMat.maxSimultaneousLights = 24; // 빛이 여러 개 겹쳐도 지워지지 않도록 한계치 상향
+        ground.material = gMat;
+
+        // 경계선 (붉은 벽)
+        const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
+        const bMat = new BABYLON.StandardMaterial("bMat", scene);
+        bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5;
+        border.material = bMat; border.position.y = 1;
+
+        // 진실(단어)을 띄울 텍스처 평면
+        bTruthPlane = BABYLON.MeshBuilder.CreateGround("truthPlane", {width: 400, height: 400}, scene);
+        bTruthPlane.position.y = 0.1; // 바닥 위에 살짝 띄움
+        truthDynamicTexture = new BABYLON.DynamicTexture("dt", {width:1024, height:1024}, scene, false);
+        let tMat = new BABYLON.StandardMaterial("tMat", scene);
+        tMat.diffuseTexture = truthDynamicTexture;
+        tMat.diffuseTexture.hasAlpha = true;
+        tMat.specularColor = new BABYLON.Color3(0,0,0);
+        tMat.maxSimultaneousLights = 24;
+        bTruthPlane.material = tMat;
+
+        // 충전소 (3D 기둥)
+        stations2D.forEach((s, i) => {
+            let cx = to3D(s.x); let cz = to3D(s.y);
+            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: to3D(500)}, scene);
+            cyl.position = new BABYLON.Vector3(cx, 10, cz);
+            let cMat = new BABYLON.StandardMaterial("cMat", scene);
+            cMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3); cMat.alpha = 0.15; cMat.disableLighting = true;
+            cyl.material = cMat;
+            
+            let sLight = new BABYLON.PointLight("sl"+i, new BABYLON.Vector3(cx, 5, cz), scene);
+            sLight.diffuse = new BABYLON.Color3(0, 1, 0.5); sLight.intensity = 500;
+        });
+
+        return scene;
+    };
+
+    bScene = createScene();
+
+    // 단어(진실) 텍스처 업데이트 함수
+    function updateTruthMesh(word) {
+        if(!truthDynamicTexture) return;
+        let ctx = truthDynamicTexture.getContext();
+        ctx.clearRect(0,0,1024,1024);
+        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = "bold 300px sans-serif";
+        ctx.fillText(word, 512, 512);
+        truthDynamicTexture.update();
+    }
+
+    // ==========================================
+    // 6. 세계의 동기화 (Render Loop)
+    // ==========================================
+    engine.runRenderLoop(() => {
+      if (gameState !== 'PLAY') { bScene.render(); return; }
+
+      // 1. 논리 연산
+      if (lanternOn) { battery -= batteryDrain; if (battery < 0) battery = 0; }
+      if (battery <= 0) lanternOn = false;
+      
+      handleInput(); resolveCollision();
+      socket.emit('move', { x: playerX, y: playerY, dir: playerDir, lantern: lanternOn });
+
+      stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 250) battery = Math.min(100, battery + 1.5); });
+
+      // 2. 내 3D 육신과 랜턴 위치 동기화
+      bPlayer.position.x = to3D(playerX);
+      bPlayer.position.z = to3D(playerY);
+      bCamera.target = bPlayer.position; // 카메라 추적
+      
+      let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
+      bLantern.position = new BABYLON.Vector3(to3D(playerX), 15, to3D(playerY));
+      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.5, Math.sin(playerDir));
+      bLantern.intensity = lanternOn ? 1500 * flicker : 0;
+      
+      bTruthPlane.rotation.y = -serverWorld.angle; // 진실 회전
+
+      // 3. 다른 탐험가들 동기화
+      for (let id in serverWorld.players) {
+        if (id === socket.id) continue;
+        let p = serverWorld.players[id];
+        if (!meshDict.players[id]) {
+            let m = BABYLON.MeshBuilder.CreateSphere("p_"+id, {diameter: 3}, bScene);
+            let mat = new BABYLON.StandardMaterial("pm_"+id, bScene);
+            mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true;
+            m.material = mat; m.position.y = 1.5;
+            
+            let l = new BABYLON.SpotLight("pl_"+id, BABYLON.Vector3.Zero(), BABYLON.Vector3.Zero(), Math.PI/2, 2, bScene);
+            l.diffuse = BABYLON.Color3.FromHexString(p.color || "#ffffff");
+            meshDict.players[id] = { mesh: m, light: l };
+        }
+        let px3 = to3D(p.x); let pz3 = to3D(p.y);
+        meshDict.players[id].mesh.position.x = px3; meshDict.players[id].mesh.position.z = pz3;
+        meshDict.players[id].light.position = new BABYLON.Vector3(px3, 15, pz3);
+        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.5, Math.sin(p.dir));
+        meshDict.players[id].light.intensity = p.lantern ? 1000 : 0;
+      }
+      // 접속 해제자 삭제
+      for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
+
+      // 4. 망령 동기화
+      serverWorld.enemies.forEach((e, i) => {
+        if (!e.active) { if(meshDict.enemies[i]) { meshDict.enemies[i].dispose(); delete meshDict.enemies[i]; } return; }
+        if (dist(playerX, playerY, e.x, e.y) < playerRadius + 15) { battery -= 5; if(battery<0) battery=0; }
+        
+        if (!meshDict.enemies[i]) {
+            let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 6}, bScene);
+            let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
+            mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
+            m.material = mat; m.position.y = 3;
+            meshDict.enemies[i] = m;
+        }
+        meshDict.enemies[i].position.x = to3D(e.x); meshDict.enemies[i].position.z = to3D(e.y);
+      });
+
+      // 5. 유성우 (운석) 동기화
+      if(serverWorld.meteors) {
+          serverWorld.meteors.forEach((m, i) => {
+             let age = serverWorld.serverTime - m.startTime;
+             if (age > m.duration) return;
+             if(!meshDict.meteors[m.startTime]) {
+                 let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3D(m.x), 20, to3D(m.y)), bScene);
+                 ml.diffuse = new BABYLON.Color3(1, 0.6, 0.2);
+                 meshDict.meteors[m.startTime] = ml;
+             }
+             meshDict.meteors[m.startTime].intensity = mapVal(age, 0, m.duration, 5000, 0); // 빛이 서서히 줄어듦
+          });
+      }
+      // 끝난 유성우 제거
+      for(let key in meshDict.meteors) {
+          let found = serverWorld.meteors && serverWorld.meteors.find(m => m.startTime.toString() === key);
+          if(!found) { meshDict.meteors[key].dispose(); delete meshDict.meteors[key]; }
+      }
+
+      // 6. 형광물질 동기화
+      if(serverWorld.fMarks) {
+          serverWorld.fMarks.forEach(mk => {
+              if(!meshDict.fMarks[mk.id]) {
+                  let fml = new BABYLON.PointLight("fml_"+mk.id, new BABYLON.Vector3(to3D(mk.x), 5, to3D(mk.y)), bScene);
+                  fml.diffuse = new BABYLON.Color3(0, 1, 1); fml.intensity = 800;
+                  meshDict.fMarks[mk.id] = fml;
+              }
+          });
+      }
+
+      // 7. UI 업데이트
+      let pCount = Object.keys(serverWorld.players).length;
+      let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
+      document.getElementById('room-info').innerText = `방: ${myRoom} | 현재 탐험가: ${pCount}명`;
+      let bBar = document.getElementById('battery-bar');
+      bBar.style.width = battery + '%';
+      bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
+      document.getElementById('lantern-info').innerText = lanternOn ? "랜턴 켜짐 (Z키: 끄기)" : "랜턴 꺼짐 (Z키: 켜기)";
+      document.getElementById('fitem-info').innerText = `형광물질 (X키: 붓칠): ${fCount}개`;
+      document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${((serverWorld.serverTime - (serverWorld.gameStartTime || serverWorld.serverTime))/1000).toFixed(1)}초`;
+
+      bScene.render();
+    });
+
+    window.addEventListener("resize", () => { engine.resize(); });
+  </script>
+</body>
+</html>
