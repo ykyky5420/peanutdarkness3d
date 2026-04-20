@@ -136,14 +136,13 @@
     let playerDir = -Math.PI / 2; let targetDir = -Math.PI / 2;
     
     const playerSpeed = 7; 
-    const playerRadius = 12; // 몬스터 충돌 연산용
-    const playerPhysicsRadius = 15; // 벽 터널링 방지용 두께
+    const playerRadius = 12; 
+    const playerPhysicsRadius = 15; 
     
     let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
 
-    // ✨ 발자국 연산용 변수 복원
     let lastStepDistance = 0;
     let stepToggle = 1;
 
@@ -231,13 +230,17 @@
       canvas.focus(); document.body.style.cursor = 'none';
     }
 
+    // ==========================================
+    // 2D 충돌 엔진 (Alpha 채널 스캔)
+    // ==========================================
     let collisionPixels;
     function initCollisionLayer(word) {
         let colCanvas = document.getElementById('colCanvas');
         colCanvas.width = MAP_SIZE * COLLISION_SCALE; colCanvas.height = MAP_SIZE * COLLISION_SCALE;
         let ctx = colCanvas.getContext('2d', { willReadFrequently: true });
-        ctx.fillStyle = "black"; ctx.fillRect(0, 0, colCanvas.width, colCanvas.height);
-        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.clearRect(0, 0, colCanvas.width, colCanvas.height); // 투명한 배경
+        ctx.fillStyle = "white"; // 순백의 글자
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.font = `bold ${3500 * COLLISION_SCALE}px sans-serif`;
         ctx.fillText(word, colCanvas.width / 2, colCanvas.height / 2);
         collisionPixels = ctx.getImageData(0, 0, colCanvas.width, colCanvas.height).data;
@@ -250,7 +253,8 @@
       let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
       let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
       if (cx < 0 || cx >= Math.floor(MAP_SIZE*COLLISION_SCALE) || cy < 0 || cy >= Math.floor(MAP_SIZE*COLLISION_SCALE)) return false;
-      return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4] > 128; 
+      // Alpha 채널(+3)을 검사하여 완벽하게 글자에만 충돌하게 만듭니다.
+      return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128; 
     }
 
     function isColliding(x, y) {
@@ -341,6 +345,9 @@
       }
     }
 
+    // ==========================================
+    // 3D 엔진 (완벽한 칠흑, 그림자)
+    // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
     let stations3D = [];
@@ -378,9 +385,7 @@
         gMat.diffuseTexture = groundTex; 
         gMat.specularColor = new BABYLON.Color3(0,0,0); 
         gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
-        // ✨ 한 머티리얼이 처리할 수 있는 최대 불빛 수를 8개로 줄여 엔진 다운 방지
-        gMat.maxSimultaneousLights = 8; 
-        ground.material = gMat;
+        gMat.maxSimultaneousLights = 8; ground.material = gMat;
         ground.receiveShadows = true;
 
         const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
@@ -391,7 +396,8 @@
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
         tMat.diffuseColor = new BABYLON.Color3(1, 1, 1); // 순백의 진실
         tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
-        tMat.maxSimultaneousLights = 8; // 셰이더 오류 방지
+        tMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); 
+        tMat.maxSimultaneousLights = 8; 
         truthBaseBox.material = tMat;
         truthBaseBox.receiveShadows = true; 
         shadowGenerator.addShadowCaster(truthBaseBox, true); 
@@ -446,7 +452,7 @@
         for(let cy=0; cy<mapScale; cy+=5){ 
             for(let cx=0; cx<mapScale; cx+=5){
                 let idx = (cy * mapScale + cx) * 4;
-                if(collisionPixels[idx] > 128) {
+                if(collisionPixels[idx + 3] > 128) { // Alpha 채널 검사
                     let x3D = (cx - 400); 
                     let z3D = -(cy - 400); 
                     let m = BABYLON.Matrix.Translation(x3D, 7.5, z3D); 
@@ -459,40 +465,46 @@
     }
 
     // ==========================================
-    // 2D 원형 미니맵 (운석, 형광물질 시야 포함)
+    // 밝혀진 글자까지 품어내는 완벽한 2D 미니맵
     // ==========================================
     function drawMinimap() {
         let mm = document.getElementById('minimap');
         let ctx = mm.getContext('2d');
+        let colCanvas = document.getElementById('colCanvas'); // 하얀색 글자 캔버스
         let mmSize = 110; let scale = mmSize / MAP_RADIUS; 
         
         ctx.clearRect(0, 0, mmSize*2, mmSize*2);
         ctx.save(); ctx.translate(mmSize, mmSize);
 
-        // 시야가 뚫린 바닥
+        // 1. 미니맵 맨 밑바닥
         ctx.fillStyle = "#1a1a24"; 
         ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
-        stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); });
+        // 2. 밑바닥 위에 정답 글자를 깔아둡니다.
+        ctx.save();
+        let dx = MAP_CENTER - playerX; let dy = MAP_CENTER - playerY;
+        ctx.translate(dx * scale, dy * scale);
+        ctx.rotate(serverWorld.angle);
+        let drawSize = MAP_SIZE * scale;
+        ctx.drawImage(colCanvas, -drawSize/2, -drawSize/2, drawSize, drawSize);
+        ctx.restore();
 
-        // 완벽한 칠흑
+        // 3. 완벽한 칠흑의 장막으로 모두 덮습니다.
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = "rgba(0, 0, 0, 0.98)"; 
         ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
-        // ✨ 빛이 존재하는 모든 곳 뚫어내기
+        // 4. 빛이 존재하는 모든 곳을 투명하게 파내어, 그 밑에 깔린 글자와 지형을 드러냅니다.
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = "white";
 
         let ox = (playerX - MAP_CENTER) * scale; let oy = (playerY - MAP_CENTER) * scale;
-        // 랜턴 빛
         if (lanternOn) {
             let radius = 900 * scale; 
             ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, radius, playerDir - currentFov/2, playerDir + currentFov/2); ctx.fill();
         }
         ctx.beginPath(); ctx.arc(ox, oy, 55 * scale, 0, Math.PI*2); ctx.fill(); 
 
-        // 유성우 빛
         if(serverWorld.meteors) {
             serverWorld.meteors.forEach(m => {
                 let age = serverWorld.serverTime - m.startTime; 
@@ -500,16 +512,15 @@
                 if(mRad > 0) { let mx = (m.x - MAP_CENTER) * scale; let my = (m.y - MAP_CENTER) * scale; ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill(); }
             });
         }
-
-        // 형광물질 빛
+        
         if(serverWorld.fMarks) {
             serverWorld.fMarks.forEach(mk => {
                 let mx = (mk.x - MAP_CENTER) * scale; let my = (mk.y - MAP_CENTER) * scale; 
-                ctx.beginPath(); ctx.arc(mx, my, 250 * scale, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(mx, my, 400 * scale, 0, Math.PI*2); ctx.fill(); 
             });
         }
 
-        // 아이콘 그리기
+        // 5. 뚫어낸 구멍 위에 아이콘을 덧그립니다.
         ctx.globalCompositeOperation = 'source-over';
         stations2D.forEach(s => { let sx = (s.x - MAP_CENTER) * scale; let sy = (s.y - MAP_CENTER) * scale; ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); });
 
@@ -535,7 +546,6 @@
       handleInput(); 
       socket.emit('move', { x: playerX, y: playerY, dir: playerDir, lantern: lanternOn });
 
-      // ✨ 발자국 연산 및 서버 전송 (푸른 몬스터 추격용)
       let movedDist = dist(oldX, oldY, playerX, playerY);
       if (movedDist > 0) {
           lastStepDistance += movedDist;
@@ -547,11 +557,9 @@
               socket.emit('footprint', { x: fx, y: fy, angle: playerDir });
               stepToggle *= -1;
               
-              // 바닥에 시각적인 황금빛 발자국 흔적 생성
               let fp = BABYLON.MeshBuilder.CreatePlane("fp", {width: 1.5, height: 2.5}, bScene);
               fp.position = new BABYLON.Vector3(to3Dx(fx), 0.1, to3Dz(fy));
-              fp.rotation.x = Math.PI / 2;
-              fp.rotation.y = -playerDir + Math.PI/2; 
+              fp.rotation.x = Math.PI / 2; fp.rotation.y = -playerDir + Math.PI/2; 
               let fpMat = new BABYLON.StandardMaterial("fpMat", bScene);
               fpMat.emissiveColor = new BABYLON.Color3(0.8, 0.6, 0.2);
               fpMat.disableLighting = true; fpMat.alpha = 0.6; fp.material = fpMat;
@@ -606,20 +614,30 @@
           });
       }
 
-      if(serverWorld.fItems) {
-          serverWorld.fItems.forEach(fi => {
-              if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
-              if(!meshDict.fItems[fi.id]) {
-                  let fm = BABYLON.MeshBuilder.CreateBox("fit_"+fi.id, {size: 1.5}, bScene);
-                  let fmat = new BABYLON.StandardMaterial("fitm_"+fi.id, bScene);
+      let currentFMarkIds = [];
+      if(serverWorld.fMarks) {
+          serverWorld.fMarks.forEach((mk, idx) => {
+              let safeId = mk.id !== undefined ? mk.id : `fm_${idx}_${Math.floor(mk.x)}_${Math.floor(mk.y)}`;
+              currentFMarkIds.push(safeId);
+              if(!meshDict.fMarks[safeId]) {
+                  let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
+                  fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; fml.range = 40;
+                  
+                  let fm = BABYLON.MeshBuilder.CreateBox("fit_"+safeId, {size: 1.5}, bScene);
+                  let fmat = new BABYLON.StandardMaterial("fitm_"+safeId, bScene);
                   fmat.emissiveColor = new BABYLON.Color3(0, 1, 1); fmat.disableLighting = true; fm.material = fmat;
-                  meshDict.fItems[fi.id] = fm;
+                  
+                  meshDict.fMarks[safeId] = { light: fml, mesh: fm, x: mk.x, y: mk.y };
               }
-              meshDict.fItems[fi.id].position = new BABYLON.Vector3(to3Dx(fi.x), 2 + Math.cos(timeOffset*2 + fi.x), to3Dz(fi.y));
-              meshDict.fItems[fi.id].rotation.x += 0.02; meshDict.fItems[fi.id].rotation.y += 0.02;
+              meshDict.fMarks[safeId].mesh.position = new BABYLON.Vector3(to3Dx(mk.x), 2 + Math.cos(timeOffset*2 + mk.x), to3Dz(mk.y));
+              meshDict.fMarks[safeId].mesh.rotation.x += 0.02; meshDict.fMarks[safeId].mesh.rotation.y += 0.02;
           });
       }
-      for(let key in meshDict.fItems) { if(!serverWorld.fItems || !serverWorld.fItems.find(f => f.id.toString() === key)) { meshDict.fItems[key].dispose(); delete meshDict.fItems[key]; } }
+      for(let key in meshDict.fMarks) { 
+          if(!currentFMarkIds.includes(key)) { 
+              meshDict.fMarks[key].light.dispose(); meshDict.fMarks[key].mesh.dispose(); delete meshDict.fMarks[key]; 
+          } 
+      }
 
       for (let id in serverWorld.players) {
         if (id === socket.id) continue;
@@ -643,34 +661,31 @@
 
       serverWorld.enemies.forEach((e, i) => {
         if (!e.active) { 
-            if(meshDict.enemies[i]) { 
-                meshDict.enemies[i].mesh.dispose(); 
-                meshDict.enemies[i].halo.dispose();
-                delete meshDict.enemies[i]; 
-            } 
+            if(meshDict.enemies[i]) { meshDict.enemies[i].mesh.dispose(); meshDict.enemies[i].t1.dispose(); meshDict.enemies[i].t2.dispose(); delete meshDict.enemies[i]; } 
             return; 
         }
         if (dist(playerX, playerY, e.x, e.y) < playerRadius + 15) { battery -= 5; if(battery<0) battery=0; }
         if (!meshDict.enemies[i]) {
-            let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 6}, bScene);
+            let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 5}, bScene);
             let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
             mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
             m.material = mat; m.position.y = 3; 
 
-            let halo = BABYLON.MeshBuilder.CreateSphere("eHalo_"+i, {diameter: 9, segments: 8}, bScene);
-            let hMat = new BABYLON.StandardMaterial("eHaloMat_"+i, bScene);
-            hMat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(1, 0, 0) : new BABYLON.Color3(0, 0.5, 1);
-            hMat.alpha = 0.3; hMat.wireframe = true; halo.material = hMat;
-            halo.parent = m;
+            let t1 = BABYLON.MeshBuilder.CreateTorus("et1_"+i, {diameter: 8, thickness: 0.5}, bScene);
+            t1.material = mat; t1.parent = m; t1.rotation.x = Math.PI/2;
+            
+            let t2 = BABYLON.MeshBuilder.CreateTorus("et2_"+i, {diameter: 10, thickness: 0.2}, bScene);
+            t2.material = mat; t2.parent = m;
 
             let el = new BABYLON.PointLight("el_"+i, BABYLON.Vector3.Zero(), bScene);
             el.diffuse = e.type === 'red' ? new BABYLON.Color3(1, 0, 0) : new BABYLON.Color3(0, 0.5, 1);
-            el.intensity = 5; el.range = 40; el.parent = m;
+            el.intensity = 5; el.range = 60; el.parent = m;
 
-            meshDict.enemies[i] = { mesh: m, halo: halo };
+            meshDict.enemies[i] = { mesh: m, t1: t1, t2: t2 };
         }
         meshDict.enemies[i].mesh.position.x = to3Dx(e.x); meshDict.enemies[i].mesh.position.z = to3Dz(e.y);
-        meshDict.enemies[i].halo.rotation.y += 0.05; meshDict.enemies[i].halo.rotation.x += 0.03; 
+        meshDict.enemies[i].t1.rotation.y += 0.05; meshDict.enemies[i].t1.rotation.z += 0.04;
+        meshDict.enemies[i].t2.rotation.x += 0.03; meshDict.enemies[i].t2.rotation.z -= 0.05;
       });
 
       if(serverWorld.meteors) {
@@ -679,28 +694,16 @@
              if (age > m.duration) return;
              if(!meshDict.meteors[m.startTime]) {
                  let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3Dx(m.x), 20, to3Dz(m.y)), bScene);
-                 ml.diffuse = new BABYLON.Color3(1, 0.4, 0.1); 
+                 ml.diffuse = new BABYLON.Color3(1, 0.3, 0.05); 
                  ml.range = 150; 
                  meshDict.meteors[m.startTime] = { light: ml };
              }
-             meshDict.meteors[m.startTime].light.intensity = mapVal(age, 0, m.duration, 20, 0); 
+             meshDict.meteors[m.startTime].light.intensity = mapVal(age, 0, m.duration, 10, 0); 
           });
       }
       for(let key in meshDict.meteors) {
           let found = serverWorld.meteors && serverWorld.meteors.find(m => m.startTime.toString() === key);
           if(!found) { meshDict.meteors[key].light.dispose(); delete meshDict.meteors[key]; }
-      }
-
-      if(serverWorld.fMarks) {
-          serverWorld.fMarks.forEach((mk, idx) => {
-              let safeId = mk.id !== undefined ? mk.id : `fm_${idx}_${Math.floor(mk.x)}`;
-              if(!meshDict.fMarks[safeId]) {
-                  let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
-                  fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; 
-                  fml.range = 40;
-                  meshDict.fMarks[safeId] = { light: fml };
-              }
-          });
       }
 
       let pCount = Object.keys(serverWorld.players).length;
