@@ -60,9 +60,14 @@
     #sys-msg-container { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 45; pointer-events: none; }
     .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+
+    /* 레이더(미니맵) 테두리 - 배경과 명확히 구분됩니다 */
+    #minimap-border { position: absolute; top: 20px; right: 20px; width: 25vw; height: 25vh; border: 3px solid #d4a017; z-index: 35; pointer-events: none; display: none; border-radius: 5px; }
   </style>
 </head>
 <body>
+
+  <div id="minimap-border"></div>
 
   <canvas id="renderCanvas"></canvas>
 
@@ -185,7 +190,7 @@
 
     socket.on('gameEnd', (data) => {
         gameState = 'GAME_OVER';
-        ['mobile-ui','chat-ui','answer-ui','info-ui'].forEach(id => document.getElementById(id).style.display = 'none');
+        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap-border'].forEach(id => document.getElementById(id).style.display = 'none');
         document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
         document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
         document.getElementById('game-over-ui').style.display = 'flex';
@@ -210,6 +215,7 @@
       document.getElementById('answer-ui').style.display = 'flex';
       document.getElementById('info-ui').style.display = 'flex';
       document.getElementById('chat-ui').style.display = 'flex';
+      document.getElementById('minimap-border').style.display = 'block';
       if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.getElementById('mobile-ui').style.display = 'block';
       
       canvas.focus(); document.body.style.cursor = 'none';
@@ -294,9 +300,11 @@
       else {
           if (activeKeys['arrowleft'] || activeKeys['a']) dx -= playerSpeed;
           if (activeKeys['arrowright'] || activeKeys['d']) dx += playerSpeed;
+          // W를 누르면 화면 위쪽(-Y 방향)으로 이동합니다.
           if (activeKeys['arrowup'] || activeKeys['w']) dy -= playerSpeed;
           if (activeKeys['arrowdown'] || activeKeys['s']) dy += playerSpeed;
       }
+      
       if (dx !== 0 || dy !== 0) targetDir = Math.atan2(dy, dx);
       let diff = targetDir - playerDir;
       while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
@@ -306,6 +314,7 @@
       if (!isColliding(nx, playerY)) playerX = nx;
       if (!isColliding(playerX, ny)) playerY = ny;
 
+      // 외벽을 넘어가면 반대편으로 이동합니다.
       if (dist(playerX, playerY, MAP_CENTER, MAP_CENTER) > MAP_RADIUS + 15) {
         let a = Math.atan2(playerY - MAP_CENTER, playerX - MAP_CENTER);
         playerX = MAP_CENTER + Math.cos(a + Math.PI) * (MAP_RADIUS - 15);
@@ -313,10 +322,12 @@
       }
     }
 
-    let bScene, bCamera, minimapCamera, bPlayer, bLantern, bTruthPlane, truthDynamicTexture;
+    let bScene, bCamera, minimapCamera, bPlayer, bLantern, truthBox, truthDynamicTexture, playerTrail;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {} };
 
-    function to3D(val) { return (val - MAP_CENTER) * 0.1; } 
+    // 2D 캔버스의 +Y방향(아래)은 3D 공간의 -Z방향에 대응됩니다.
+    function to3Dx(val) { return (val - MAP_CENTER) * 0.1; } 
+    function to3Dz(val) { return -(val - MAP_CENTER) * 0.1; } 
 
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
@@ -325,27 +336,26 @@
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
         scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
-        // 2. 메인 카메라 (탑다운 뷰, 플레이어 바로 위에서 수직으로 내려다봄)
-        bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 100, 0), scene);
-        bCamera.setTarget(BABYLON.Vector3.Zero());
-        // 미니맵용 요소들은 렌더링하지 않도록 레이어 마스크 설정 (기본값 0x0FFFFFFF)
+        // 2. 일관된 메인 카메라 (무조건 수직으로 내려다보는 독수리의 시야)
+        bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
+        // 회전 고정: 고개가 꺾이지 않고 언제나 땅만 똑바로 내려다봅니다.
+        bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
         bCamera.layerMask = 0x10000000; 
         scene.activeCameras.push(bCamera);
 
         // 3. 미니맵 카메라 (우측 상단)
-        minimapCamera = new BABYLON.FreeCamera("minimapCamera", new BABYLON.Vector3(0, 200, 0), scene);
-        minimapCamera.setTarget(BABYLON.Vector3.Zero());
+        minimapCamera = new BABYLON.FreeCamera("minimapCamera", new BABYLON.Vector3(0, 300, 0), scene);
+        minimapCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0); // 똑같이 수직
         minimapCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
-        // 미니맵 전용 마커들만 렌더링하도록 레이어 마스크 설정
         minimapCamera.layerMask = 0x20000000; 
+        // 배경과 섞이지 않도록 살짝 어두운 먹색을 미니맵 바닥색으로 깔아줍니다
+        minimapCamera.clearColor = new BABYLON.Color4(0.08, 0.08, 0.12, 1);
         
-        let mmSize = 100; // 미니맵에 보일 영역 크기 설정
-        minimapCamera.orthOLeft = -mmSize;
-        minimapCamera.orthoRight = mmSize;
-        minimapCamera.orthoTop = mmSize;
-        minimapCamera.orthoBottom = -mmSize;
+        let mmSize = 100; 
+        minimapCamera.orthoLeft = -mmSize; minimapCamera.orthoRight = mmSize;
+        minimapCamera.orthoTop = mmSize; minimapCamera.orthoBottom = -mmSize;
         
-        // 미니맵 뷰포트 설정 (우측 상단)
+        // 우측 상단에 25% 크기로 렌더링 (HTML의 테두리와 크기/위치가 일치합니다)
         minimapCamera.viewport = new BABYLON.Viewport(0.75, 0.75, 0.25, 0.25);
         scene.activeCameras.push(minimapCamera);
 
@@ -360,7 +370,7 @@
         gMat.specularColor = new BABYLON.Color3(0,0,0); 
         gMat.maxSimultaneousLights = 24; 
         ground.material = gMat;
-        ground.layerMask = 0x10000000; // 메인 카메라에만 보임
+        ground.layerMask = 0x10000000;
 
         const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
         const bMat = new BABYLON.StandardMaterial("bMat", scene);
@@ -368,18 +378,19 @@
         border.material = bMat; border.position.y = 1;
         border.layerMask = 0x10000000;
 
-        bTruthPlane = BABYLON.MeshBuilder.CreateGround("truthPlane", {width: 400, height: 400}, scene);
-        bTruthPlane.position.y = 0.1; 
+        // --- 입체적인 진실의 제단 ---
+        // 납작한 판이 아니라 거대한 3D 블록(높이 30)으로 만들었습니다.
+        truthBox = BABYLON.MeshBuilder.CreateBox("truthBox", {width: 400, height: 30, depth: 400}, scene);
+        truthBox.position.y = 15; // 반쯤 위로 올림
         truthDynamicTexture = new BABYLON.DynamicTexture("dt", {width:1024, height:1024}, scene, false);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
         tMat.diffuseTexture = truthDynamicTexture;
-        tMat.diffuseTexture.hasAlpha = true;
+        tMat.emissiveTexture = truthDynamicTexture; // 글자가 스스로 빛을 냅니다
         tMat.specularColor = new BABYLON.Color3(0,0,0);
-        tMat.maxSimultaneousLights = 24;
-        bTruthPlane.material = tMat;
-        bTruthPlane.layerMask = 0x10000000; // 진실은 미니맵에 스포일러 방지
+        truthBox.material = tMat;
+        truthBox.layerMask = 0x10000000; 
 
-        // --- 탐험가 육신 (본체와 미니맵 마커) ---
+        // --- 탐험가 육신 및 꼬리 효과 ---
         bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
         let pMat = new BABYLON.StandardMaterial("pMat", scene);
         pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); 
@@ -388,18 +399,27 @@
         bPlayer.position.y = 1.5;
         bPlayer.layerMask = 0x10000000;
 
-        // 미니맵용 플레이어 마커 (항상 보이도록 emissive 설정)
+        // 아름다운 꼬리(Trail) 궤적 추가
+        playerTrail = new BABYLON.TrailMesh("trail", bPlayer, scene, 1.5, 30, true);
+        let trailMat = new BABYLON.StandardMaterial("trailMat", scene);
+        trailMat.emissiveColor = new BABYLON.Color3(1, 0.6, 0);
+        playerTrail.material = trailMat;
+        playerTrail.layerMask = 0x10000000;
+
+        // 미니맵용 플레이어 마커
         let mmPlayerMarker = BABYLON.MeshBuilder.CreateSphere("mmPlayerMarker", {diameter: 8}, scene);
         let mmpMat = new BABYLON.StandardMaterial("mmpMat", scene);
-        mmpMat.emissiveColor = new BABYLON.Color3(1, 1, 0); // 노란색 마커
+        mmpMat.emissiveColor = new BABYLON.Color3(1, 1, 0);
         mmpMat.disableLighting = true;
         mmPlayerMarker.material = mmpMat;
-        mmPlayerMarker.layerMask = 0x20000000; // 미니맵 카메라에만 보임
-        mmPlayerMarker.parent = bPlayer; // 본체와 함께 이동
+        mmPlayerMarker.layerMask = 0x20000000; 
+        mmPlayerMarker.parent = bPlayer; 
 
+        // --- 안식처 (충전소 축소 적용) ---
         stations2D.forEach((s, i) => {
-            let cx = to3D(s.x); let cz = to3D(s.y);
-            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: to3D(500)}, scene);
+            let cx = to3Dx(s.x); let cz = to3Dz(s.y);
+            // 크기를 지름 500에서 200으로 크게 줄였습니다.
+            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: 20}, scene);
             cyl.position = new BABYLON.Vector3(cx, 10, cz);
             let cMat = new BABYLON.StandardMaterial("cMat", scene);
             cMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3); cMat.alpha = 0.15; cMat.disableLighting = true;
@@ -409,10 +429,10 @@
             let sLight = new BABYLON.PointLight("sl"+i, new BABYLON.Vector3(cx, 5, cz), scene);
             sLight.diffuse = new BABYLON.Color3(0, 1, 0.5); sLight.intensity = 5;
 
-            // 미니맵용 충전소 마커
-            let mmStMarker = BABYLON.MeshBuilder.CreatePlane("mmStMarker"+i, {size: 40}, scene);
+            // 미니맵용 마커
+            let mmStMarker = BABYLON.MeshBuilder.CreatePlane("mmStMarker"+i, {size: 30}, scene);
             mmStMarker.position = new BABYLON.Vector3(cx, 10, cz);
-            mmStMarker.rotation.x = Math.PI / 2; // 탑다운 뷰를 위해 눕힘
+            mmStMarker.rotation.x = Math.PI / 2; 
             let mmsMat = new BABYLON.StandardMaterial("mmsMat"+i, scene);
             mmsMat.emissiveColor = new BABYLON.Color3(0, 1, 0);
             mmsMat.disableLighting = true;
@@ -420,7 +440,6 @@
             mmStMarker.layerMask = 0x20000000;
         });
 
-        // 씬 배경색으로 미니맵 바탕도 칠해지므로 렌더링 시 클리어 방지 옵션은 기본값 유지
         return scene;
     };
 
@@ -429,9 +448,10 @@
     function updateTruthMesh(word) {
         if(!truthDynamicTexture) return;
         let ctx = truthDynamicTexture.getContext();
-        ctx.clearRect(0,0,1024,1024);
-        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = "bold 300px sans-serif";
+        // 텍스처 배경을 어둡게 하고 글자만 밝게 하여 입체 블록에 잘 어울리게 합니다
+        ctx.fillStyle = "#111"; ctx.fillRect(0,0,1024,1024);
+        ctx.fillStyle = "#d4a017"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = "bold 250px sans-serif";
         ctx.fillText(word, 512, 512);
         truthDynamicTexture.update();
     }
@@ -445,24 +465,25 @@
       handleInput(); resolveCollision();
       socket.emit('move', { x: playerX, y: playerY, dir: playerDir, lantern: lanternOn });
 
-      stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 250) battery = Math.min(100, battery + 1.5); });
+      // 충전소 충돌 판정 크기도 100으로 줄였습니다.
+      stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 100) battery = Math.min(100, battery + 1.5); });
 
       // 내 3D 육신 위치 갱신
-      let px3 = to3D(playerX); let pz3 = to3D(playerY);
+      let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
       bPlayer.position.x = px3;
       bPlayer.position.z = pz3;
       
-      // 메인 카메라와 미니맵 카메라가 플레이어를 따라가도록 위치 갱신
+      // 메인 카메라와 미니맵 카메라는 고개를 돌리지 않고 위치만 쫓아갑니다
       bCamera.position.x = px3; bCamera.position.z = pz3;
       minimapCamera.position.x = px3; minimapCamera.position.z = pz3;
       
       let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
       bLantern.position = new BABYLON.Vector3(px3, 10, pz3);
-      // 탑다운 시점이므로 -Z 방향을 전방으로 계산
-      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.5, Math.sin(playerDir));
+      // 조명 방향: Z축이 반대이므로 sin값에 -를 붙여 일관성을 맞춥니다.
+      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.5, -Math.sin(playerDir));
       bLantern.intensity = lanternOn ? 15 * flicker : 0;
       
-      bTruthPlane.rotation.y = -serverWorld.angle;
+      truthBox.rotation.y = -serverWorld.angle;
 
       // 다른 플레이어 동기화
       for (let id in serverWorld.players) {
@@ -474,7 +495,12 @@
             mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true;
             m.material = mat; m.position.y = 1.5; m.layerMask = 0x10000000;
             
-            // 미니맵 마커
+            // 다른 플레이어 꼬리 추가
+            let opTrail = new BABYLON.TrailMesh("ptrail_"+id, m, bScene, 1.5, 30, true);
+            let opTrailMat = new BABYLON.StandardMaterial("ptrailMat_"+id, bScene);
+            opTrailMat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff");
+            opTrail.material = opTrailMat; opTrail.layerMask = 0x10000000;
+
             let mm = BABYLON.MeshBuilder.CreateSphere("mmp_"+id, {diameter: 6}, bScene);
             let mmat = new BABYLON.StandardMaterial("mmpm_"+id, bScene);
             mmat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mmat.disableLighting = true;
@@ -482,12 +508,12 @@
 
             let l = new BABYLON.SpotLight("pl_"+id, BABYLON.Vector3.Zero(), BABYLON.Vector3.Zero(), Math.PI/2.5, 2, bScene);
             l.diffuse = BABYLON.Color3.FromHexString(p.color || "#ffffff");
-            meshDict.players[id] = { mesh: m, light: l, mmMarker: mm };
+            meshDict.players[id] = { mesh: m, light: l, mmMarker: mm, trail: opTrail };
         }
-        let opx3 = to3D(p.x); let opz3 = to3D(p.y);
+        let opx3 = to3Dx(p.x); let opz3 = to3Dz(p.y);
         meshDict.players[id].mesh.position.x = opx3; meshDict.players[id].mesh.position.z = opz3;
         meshDict.players[id].light.position = new BABYLON.Vector3(opx3, 10, opz3);
-        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.5, Math.sin(p.dir));
+        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.5, -Math.sin(p.dir));
         meshDict.players[id].light.intensity = p.lantern ? 10 : 0;
       }
       for(let id in meshDict.players) { 
@@ -495,6 +521,7 @@
               meshDict.players[id].mesh.dispose(); 
               meshDict.players[id].mmMarker.dispose();
               meshDict.players[id].light.dispose(); 
+              meshDict.players[id].trail.dispose();
               delete meshDict.players[id]; 
           } 
       }
@@ -511,10 +538,9 @@
             let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
             mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
             m.material = mat; m.position.y = 3; m.layerMask = 0x10000000;
-            // 망령은 미니맵에 표시하지 않음
             meshDict.enemies[i] = { mesh: m };
         }
-        meshDict.enemies[i].mesh.position.x = to3D(e.x); meshDict.enemies[i].mesh.position.z = to3D(e.y);
+        meshDict.enemies[i].mesh.position.x = to3Dx(e.x); meshDict.enemies[i].mesh.position.z = to3Dz(e.y);
       });
 
       // 유성우 동기화
@@ -523,12 +549,11 @@
              let age = serverWorld.serverTime - m.startTime;
              if (age > m.duration) return;
              if(!meshDict.meteors[m.startTime]) {
-                 let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3D(m.x), 20, to3D(m.y)), bScene);
+                 let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3Dx(m.x), 20, to3Dz(m.y)), bScene);
                  ml.diffuse = new BABYLON.Color3(1, 0.6, 0.2);
                  
-                 // 미니맵용 마커
                  let mm = BABYLON.MeshBuilder.CreatePlane("mmm_"+m.startTime, {size: 30}, bScene);
-                 mm.position = new BABYLON.Vector3(to3D(m.x), 10, to3D(m.y));
+                 mm.position = new BABYLON.Vector3(to3Dx(m.x), 10, to3Dz(m.y));
                  mm.rotation.x = Math.PI / 2;
                  let mmat = new BABYLON.StandardMaterial("mmmmat_"+m.startTime, bScene);
                  mmat.emissiveColor = new BABYLON.Color3(1, 0.5, 0); mmat.disableLighting = true;
@@ -552,12 +577,11 @@
       if(serverWorld.fMarks) {
           serverWorld.fMarks.forEach(mk => {
               if(!meshDict.fMarks[mk.id]) {
-                  let fml = new BABYLON.PointLight("fml_"+mk.id, new BABYLON.Vector3(to3D(mk.x), 5, to3D(mk.y)), bScene);
+                  let fml = new BABYLON.PointLight("fml_"+mk.id, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
                   fml.diffuse = new BABYLON.Color3(0, 1, 1); fml.intensity = 8;
                   
-                  // 미니맵 마커
                   let mm = BABYLON.MeshBuilder.CreatePlane("mmf_"+mk.id, {size: 20}, bScene);
-                  mm.position = new BABYLON.Vector3(to3D(mk.x), 10, to3D(mk.y));
+                  mm.position = new BABYLON.Vector3(to3Dx(mk.x), 10, to3Dz(mk.y));
                   mm.rotation.x = Math.PI / 2;
                   let mmat = new BABYLON.StandardMaterial("mmfmat_"+mk.id, bScene);
                   mmat.emissiveColor = new BABYLON.Color3(0, 1, 1); mmat.disableLighting = true;
