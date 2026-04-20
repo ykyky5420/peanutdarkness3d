@@ -135,9 +135,7 @@
     let playerX = MAP_CENTER; let playerY = MAP_CENTER + MAP_RADIUS - 80; 
     let playerDir = -Math.PI / 2; let targetDir = -Math.PI / 2;
     const playerSpeed = 7; 
-    // ✨ 누락되었던 기본 반경을 복원하여 엔진 멈춤 해결
     const playerRadius = 12; 
-    // 벽을 뚫지 않게 하는 두꺼운 물리 반경
     const playerPhysicsRadius = 15; 
     let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
@@ -203,7 +201,6 @@
       let ans = document.getElementById('ansInput').value;
       if(ans) { socket.emit('submitAnswer', ans); document.getElementById('ansInput').value = ""; }
     }
-
     socket.on('itemCollected', () => { 
         battery = Math.min(100, battery + 10); 
         currentFov = Math.min(maxFov, currentFov + Math.PI / 8); 
@@ -341,7 +338,7 @@
     }
 
     // ==========================================
-    // 3D 엔진 (그림자와 사거리 제한 도입)
+    // 3D 엔진 (완벽한 칠흑, 그림자 렌더링, 순백의 진실)
     // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
@@ -360,16 +357,13 @@
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
         bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 10, 0), new BABYLON.Vector3(0, -0.5, 1), currentFov, 2, scene);
-        bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7); 
-        bLantern.intensity = 15; 
-        // ✨ 랜턴 빛이 뻗어나가는 거리 제한
+        bLantern.diffuse = new BABYLON.Color3(1, 0.9, 0.7); bLantern.intensity = 15; 
         bLantern.range = 250; 
 
-        // ✨ 그림자 생성기를 통해 빛이 글자를 통과하지 못하고 벽에 맺히게 합니다.
         shadowGenerator = new BABYLON.ShadowGenerator(1024, bLantern);
         shadowGenerator.useBlurExponentialShadowMap = true;
         shadowGenerator.blurKernel = 32;
-        shadowGenerator.setDarkness(0.0); // 100% 새까만 물리적 그림자
+        shadowGenerator.setDarkness(0.0); 
 
         const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_SIZE*0.1, height: MAP_SIZE*0.1}, scene);
         let groundTex = new BABYLON.DynamicTexture("groundTex", {width: 512, height: 512}, scene, false);
@@ -390,14 +384,14 @@
         const bMat = new BABYLON.StandardMaterial("bMat", scene);
         bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5; border.material = bMat; border.position.y = 1;
 
-        // 진실 블록의 질감 설정
+        // ✨ 순백의 진실 블록
         truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5, height: 15, depth: 5}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.diffuseColor = new BABYLON.Color3(0.7, 0.7, 0.7); // 랜턴 불빛이 닿으면 드러나는 회벽색
-        tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); // 스스로 빛을 내지 못함 (칠흑 동화)
+        tMat.diffuseColor = new BABYLON.Color3(1, 1, 1); // 랜턴 불빛을 받으면 순백색이 드러남
+        tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
         truthBaseBox.material = tMat;
-        truthBaseBox.receiveShadows = true; // 그림자가 맺힘
-        shadowGenerator.addShadowCaster(truthBaseBox, true); // 빛을 가려 그림자 생성
+        truthBaseBox.receiveShadows = true; 
+        shadowGenerator.addShadowCaster(truthBaseBox, true); 
 
         bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
         let pMat = new BABYLON.StandardMaterial("pMat", scene);
@@ -431,7 +425,6 @@
             
             let sLight = new BABYLON.PointLight("sl"+i, new BABYLON.Vector3(cx, 5, cz), scene);
             sLight.diffuse = new BABYLON.Color3(0, 1, 0.5); sLight.intensity = 3;
-            // ✨ 충전소 불빛이 맵 전체를 비추지 못하도록 사거리 제한
             sLight.range = 80; 
 
             stations3D.push({ mesh: cyl, halo: halo });
@@ -463,7 +456,7 @@
     }
 
     // ==========================================
-    // 밝혀진 시야를 담아내는 실시간 레이더(미니맵)
+    // 밝혀진 시야를 실시간으로 담아내는 레이더(미니맵)
     // ==========================================
     function drawMinimap() {
         let mm = document.getElementById('minimap');
@@ -488,6 +481,7 @@
         let ox = (playerX - MAP_CENTER) * scale; let oy = (playerY - MAP_CENTER) * scale;
         if (lanternOn) {
             let radius = 900 * scale; 
+            // ✨ 현재 넓어진 시야각(currentFov)이 미니맵에 완벽하게 실시간 동기화되어 그려집니다.
             ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, radius, playerDir - currentFov/2, playerDir + currentFov/2); ctx.fill();
         }
         ctx.beginPath(); ctx.arc(ox, oy, 55 * scale, 0, Math.PI*2); ctx.fill(); 
@@ -542,6 +536,7 @@
       bLantern.position = new BABYLON.Vector3(px3, 10, pz3);
       bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.5, -Math.sin(playerDir));
       bLantern.intensity = lanternOn ? 15 * flicker : 0;
+      // ✨ 아이템을 먹어 넓어진 시야각이 3D 조명에도 동기화 적용됩니다.
       bLantern.angle = currentFov; 
       
       truthBaseBox.rotation.y = serverWorld.angle;
@@ -566,6 +561,7 @@
           });
       }
 
+      // ✨ 형광물질 표시 클라이언트 고유 ID 적용하여 여러 개 영구 정착되게 수정
       if(serverWorld.fItems) {
           serverWorld.fItems.forEach(fi => {
               if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
@@ -590,7 +586,6 @@
             mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true; m.material = mat; m.position.y = 1.5;
             let l = new BABYLON.SpotLight("pl_"+id, BABYLON.Vector3.Zero(), BABYLON.Vector3.Zero(), Math.PI/2.5, 2, bScene);
             l.diffuse = BABYLON.Color3.FromHexString(p.color || "#ffffff");
-            // ✨ 동료 불빛 사거리 제한
             l.range = 250;
             meshDict.players[id] = { mesh: m, light: l };
         }
@@ -602,17 +597,39 @@
       }
       for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
 
+      // ✨ 기괴하게 진화한 망령(몬스터)의 시각 효과
       serverWorld.enemies.forEach((e, i) => {
-        if (!e.active) { if(meshDict.enemies[i]) { meshDict.enemies[i].mesh.dispose(); delete meshDict.enemies[i]; } return; }
-        // ✨ 복원된 에러 해결 (playerRadius 12 사용)
+        if (!e.active) { 
+            if(meshDict.enemies[i]) { 
+                meshDict.enemies[i].mesh.dispose(); 
+                meshDict.enemies[i].halo.dispose();
+                delete meshDict.enemies[i]; 
+            } 
+            return; 
+        }
         if (dist(playerX, playerY, e.x, e.y) < playerRadius + 15) { battery -= 5; if(battery<0) battery=0; }
         if (!meshDict.enemies[i]) {
             let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 6}, bScene);
             let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
             mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
-            m.material = mat; m.position.y = 3; meshDict.enemies[i] = { mesh: m };
+            m.material = mat; m.position.y = 3; 
+
+            // 회전하는 뼈대(Wireframe) 오라 추가
+            let halo = BABYLON.MeshBuilder.CreateSphere("eHalo_"+i, {diameter: 9, segments: 8}, bScene);
+            let hMat = new BABYLON.StandardMaterial("eHaloMat_"+i, bScene);
+            hMat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(1, 0, 0) : new BABYLON.Color3(0, 0.5, 1);
+            hMat.alpha = 0.3; hMat.wireframe = true; halo.material = hMat;
+            halo.parent = m;
+
+            // 작은 오라 불빛을 더해 공포감 조성
+            let el = new BABYLON.PointLight("el_"+i, BABYLON.Vector3.Zero(), bScene);
+            el.diffuse = e.type === 'red' ? new BABYLON.Color3(1, 0, 0) : new BABYLON.Color3(0, 0.5, 1);
+            el.intensity = 5; el.range = 40; el.parent = m;
+
+            meshDict.enemies[i] = { mesh: m, halo: halo };
         }
         meshDict.enemies[i].mesh.position.x = to3Dx(e.x); meshDict.enemies[i].mesh.position.z = to3Dz(e.y);
+        meshDict.enemies[i].halo.rotation.y += 0.05; meshDict.enemies[i].halo.rotation.x += 0.03; // 기괴하게 회전
       });
 
       if(serverWorld.meteors) {
@@ -622,7 +639,6 @@
              if(!meshDict.meteors[m.startTime]) {
                  let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3Dx(m.x), 20, to3Dz(m.y)), bScene);
                  ml.diffuse = new BABYLON.Color3(1, 0.4, 0.1); 
-                 // ✨ 유성우 불빛 사거리 억제
                  ml.range = 150; 
                  meshDict.meteors[m.startTime] = { light: ml };
              }
@@ -635,13 +651,14 @@
       }
 
       if(serverWorld.fMarks) {
-          serverWorld.fMarks.forEach(mk => {
-              if(!meshDict.fMarks[mk.id]) {
-                  let fml = new BABYLON.PointLight("fml_"+mk.id, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
+          serverWorld.fMarks.forEach((mk, idx) => {
+              // 고유 ID가 없으면 위치 기반으로 안전한 클라이언트 ID를 부여하여 소실되지 않도록 보장
+              let safeId = mk.id !== undefined ? mk.id : `fm_${idx}_${Math.floor(mk.x)}`;
+              if(!meshDict.fMarks[safeId]) {
+                  let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 5, to3Dz(mk.y)), bScene);
                   fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; 
-                  // ✨ 형광물질 불빛 사거리 억제
                   fml.range = 40;
-                  meshDict.fMarks[mk.id] = { light: fml };
+                  meshDict.fMarks[safeId] = { light: fml };
               }
           });
       }
