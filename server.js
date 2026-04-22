@@ -1,837 +1,322 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <title>Peanut Darkness 3D - 영원의 기록과 빛</title>
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
-    input { user-select: auto; -webkit-user-select: auto; }
-    #renderCanvas { width: 100vw; height: 100vh; outline: none; }
-    
-    @keyframes titleGlow { 0% { text-shadow: 0 0 10px rgba(212, 160, 23, 0.2); } 50% { text-shadow: 0 0 30px rgba(212, 160, 23, 0.8), 0 0 60px rgba(212, 160, 23, 0.5); } 100% { text-shadow: 0 0 10px rgba(212, 160, 23, 0.2); } }
-    .ui-container { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 15px; color: white; background: rgba(10, 10, 15, 0.95); padding: 50px; border-radius: 20px; border: 1px solid #333; z-index: 10; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
-    h1 { font-size: 55px; color: #d4a017; margin: 0 0 35px 0; letter-spacing: 10px; animation: titleGlow 3s ease-in-out infinite alternate; }
-    
-    .input-group { display: flex; flex-direction: column; width: 280px; gap: 8px; }
-    .input-group label { font-size: 14px; color: #888; margin-left: 5px; }
-    input { padding: 14px; border-radius: 10px; border: 1px solid #444; background: #111; color: white; font-size: 16px; width: 100%; box-sizing: border-box; text-align: center;}
-    
-    .name-gen-box { display: flex; gap: 5px; width: 100%; }
-    .name-gen-box input { flex-grow: 1; }
-    .name-gen-box button { margin: 0; padding: 0 15px; width: auto; font-size: 20px; border-radius: 10px; background: #333; color: #d4a017; border: 1px solid #444; cursor: pointer; transition: 0.3s; }
-    .name-gen-box button:hover { background: #444; color: #ffcc33; }
-    .btn-start { background: #d4a017; color: #000; font-weight: bold; padding: 18px 45px; border-radius: 10px; border: none; font-size: 20px; cursor: pointer; margin-top: 20px; width: 280px; }
-    .btn-start:hover { background: #ffcc33; transform: scale(1.02); }
-    
-    .answer-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; z-index: 20; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 50px; border: 1px solid #d4a017; }
-    .answer-container input { padding: 8px 20px; border-radius: 20px; border: none; background: #111; color: white; width: 150px; text-align: center; }
-    .answer-container button { padding: 8px 20px; margin-top: 0; width: auto; font-size: 14px; border-radius: 20px; background: #d4a017; color: black; font-weight:bold; cursor:pointer; border:none;}
-    
-    #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
-    
-    #mobile-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
-    .action-btn { position: absolute; width: 65px; height: 65px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4); color: white; font-size: 22px; font-weight: bold; display: flex; justify-content: center; align-items: center; pointer-events: auto; touch-action: none; user-select: none; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-    .action-btn:active { background: rgba(255,255,255,0.6); color: black; }
-    .joystick-knob { position: absolute; top: 50%; left: 50%; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.3); transform: translate(-50%, -50%); pointer-events: none; }
-    .joystick-zone { position: absolute; bottom: 55px; left: 30px; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); pointer-events: auto; touch-action: none; }
-    .btn-z { bottom: 55px; right: 110px; }
-    .btn-x { bottom: 135px; right: 30px; }
-    .fs-btn { position: absolute; top: 20px; right: 20px; width: 50px; height: 50px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; font-size: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 110; pointer-events: auto; transition: 0.2s; }
-    .fs-btn:active { background: rgba(255,255,255,0.4); }
+// server.js - 세상을 관장하는 절대적인 심장
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const firebase = require('firebase'); 
 
-    #chat-ui { position: absolute; top: 280px; right: 30px; width: 220px; height: 300px; display: none; flex-direction: column; gap: 5px; z-index: 45; }
-    #chat-messages { flex-grow: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; font-size: 13px; color: #eee; display: flex; flex-direction: column; gap: 4px; scrollbar-width: none; }
-    #chat-messages::-webkit-scrollbar { display: none; }
-    #chat-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; padding: 8px; color: white; font-size: 13px; outline: none; }
-    #chat-input:focus { background: rgba(255,255,255,0.2); }
-    .chat-msg { line-height: 1.4; word-break: break-all; }
-    .chat-sender { font-weight: bold; margin-right: 4px; }
-  
-    #game-over-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 10, 0.95); z-index: 100; flex-direction: column; justify-content: center; align-items: center; gap: 20px; color: white; text-align: center; }
-    .go-title { font-size: 50px; color: #d4a017; letter-spacing: 5px; text-shadow: 0 0 20px rgba(212, 160, 23, 0.5); margin-bottom: 10px; }
-    .go-desc { font-size: 22px; color: #ddd; line-height: 1.8; }
-    .go-record { font-size: 20px; color: #00FFFF; margin-top: 15px; font-weight: bold; }
-    .btn-return { background: #222; color: #d4a017; padding: 15px 40px; font-size: 18px; border-radius: 10px; border: 1px solid #d4a017; cursor: pointer; margin-top: 40px; transition: 0.3s; }
-    .btn-return:hover { background: #d4a017; color: black; transform: scale(1.05); }
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-    #info-ui { position: absolute; top: 20px; left: 20px; color: white; z-index: 40; display: none; flex-direction: column; gap: 5px; text-shadow: 1px 1px 2px black; pointer-events: none;}
-    .battery-bar-container { width: 300px; height: 18px; background: rgba(30,30,30,0.8); border: 1px solid #666; border-radius: 5px; overflow: hidden; margin-top: 5px;}
-    #battery-bar { height: 100%; width: 100%; background: #00ff64; transition: width 0.1s, background-color 0.3s; }
-    #sys-msg-container { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 45; pointer-events: none; }
-    .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
-    @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+app.use(express.static(__dirname));
 
-    #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
-  </style>
-</head>
-<body>
+const firebaseConfig = {
+  apiKey: "AIzaSyDIE7bjCnWPGOiPgS624wNqCaUqUej5h0E",
+  authDomain: "peanut-darkn.firebaseapp.com",
+  databaseURL: "https://peanut-darkn-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "peanut-darkn",
+  storageBucket: "peanut-darkn.firebasestorage.app",
+  messagingSenderId: "348191691111",
+  appId: "1:348191691111:web:11a13b541010f00dbddfc2",
+  measurementId: "G-QHW5Q5L9TW"
+};
 
-  <canvas id="minimap" width="220" height="220"></canvas>
-  <canvas id="renderCanvas"></canvas>
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  <div id="lobby-ui" class="ui-container">
-    <h1>Peanut Darkness 3D</h1>
-    <div class="input-group">
-      <label>방 코드</label>
-      <div class="name-gen-box"><input type="text" id="roomCode" maxlength="4"><button onclick="generateRandomRoomCode()">🔄</button></div>
-    </div>
-    <div class="input-group">
-      <label>탐험가 이름</label>
-      <div class="name-gen-box"><input type="text" id="pName"><button onclick="generateRandomName()">🔄</button></div>
-    </div>
-    <button class="btn-start" onclick="startGame()">어둠 속으로 뛰어들기</button>
-  </div>
+const MAP_RADIUS = 4000;
+const MAP_CENTER = 4000;
+const PLAYER_COLORS = ["#FFD700", "#00FFFF", "#ADFF2F", "#FF69B4", "#FFA500", "#87CEEB", "#F0E68C", "#E6E6FA"];
 
-  <div id="dev-ui">
-    <h3>🛠 창조주의 시선</h3>
-    <button onclick="fullVision = !fullVision;" style="margin-bottom:10px; padding:8px; border-radius:5px; border:none; cursor:pointer;">맵 전체 밝히기 토글</button>
-    <h4 style="margin: 5px 0; color: #aaa;">📚 문제 은행</h4>
-    <ul id="wordBankList" style="list-style:none; padding:0; margin:0; max-height: 150px; overflow-y: auto; font-size:14px; width:100%;"></ul>
-    <div style="display:flex; gap:5px; margin-top:10px;">
-      <input type="text" id="devWordInput" placeholder="새 단어 추가" style="width: 120px; padding:8px; font-size:14px; border-radius:5px;">
-      <button onclick="addWordToBank()" style="margin:0; padding:8px; font-size:14px; width:auto; border-radius:5px; cursor:pointer;">추가</button>
-    </div>
-  </div>
-
-  <div id="info-ui">
-    <div id="room-info">방: ---- | 현재 탐험가: 1명</div>
-    <div class="battery-bar-container"><div id="battery-bar"></div></div>
-    <div id="lantern-info">랜턴 배터리 (Z키: 끄기)</div>
-    <div id="fitem-info" style="color: #00ffff;">형광물질 (X키: 붓칠): 0개</div>
-    <div id="time-info" style="color: #ffcc00;">⏱ 흐르는 시간: 0.0초</div>
-  </div>
-  <div id="sys-msg-container"></div>
-
-  <div id="mobile-ui">
-    <div class="fs-btn" onclick="toggleFullScreen()">⛶</div>
-    <div id="joystick-zone" class="joystick-zone"><div id="joystick-knob" class="joystick-knob"></div></div>
-    <div id="btn-z" class="action-btn btn-z">Z</div>
-    <div id="btn-x" class="action-btn btn-x">X</div>
-  </div>
-
-  <div id="chat-ui">
-    <div id="chat-messages"></div>
-    <div style="display: flex; gap: 5px;">
-      <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." onfocus="isChatting=true" onblur="isChatting=false" style="width: 100%;">
-      <button id="chat-send-btn">전송</button>
-    </div>
-  </div>
-
-  <div id="answer-ui" class="answer-container">
-    <input type="text" id="ansInput" placeholder="진실의 이름을 부르세요">
-    <button onclick="submitAnswer()">외치기</button>
-  </div>
-
-  <div id="game-over-ui">
-    <div class="go-title">진실이 밝혀졌습니다</div>
-    <div id="go-text" class="go-desc"></div>
-    <div id="go-record" class="go-record"></div>
-    <button class="btn-return" onclick="location.reload()">어둠 속으로 다시 흩어지기</button>
-  </div>
-
-  <canvas id="colCanvas" style="display:none;"></canvas>
-
-  <script>
-    const socket = io();
-    const canvas = document.getElementById("renderCanvas");
-    const engine = new BABYLON.Engine(canvas, true);
-    
-    let gameState = 'LOBBY';
-    let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
-    
-    let localFMarks = [];
-    
-    const MAP_RADIUS = 4000; const MAP_CENTER = 4000; const MAP_SIZE = MAP_RADIUS * 2;
-    const COLLISION_SCALE = 0.1;
-    
-    let myRoom = ""; let isChatting = false;
-    let playerX = MAP_CENTER; let playerY = MAP_CENTER + MAP_RADIUS - 80; 
-    let playerDir = -Math.PI / 2; let targetDir = -Math.PI / 2;
-    
-    const playerSpeed = 7; 
-    const playerRadius = 12; 
-    const playerPhysicsRadius = 15; 
-    
-    let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
-    let activeKeys = {}; let joyDx = 0; let joyDy = 0;
-    let isMoving = false;
-
-    let devModeActive = false;
-    let fullVision = false;
-
-    socket.on('wordBankUpdate', (words) => {
-      let ul = document.getElementById('wordBankList');
-      if(!ul) return;
-      ul.innerHTML = "";
-      words.forEach(w => {
-        let li = document.createElement('li');
-        li.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px;";
-        li.innerHTML = \`<span>\${w}</span>
-                        <div>
-                          <button onclick="forceWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
-                          <button onclick="deleteWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
-                        </div>\`;
-        ul.appendChild(li);
-      });
-    });
-
-    function addWordToBank() { let w = document.getElementById('devWordInput').value.trim(); if(w) socket.emit('addWord', w); document.getElementById('devWordInput').value = ""; }
-    function deleteWord(w) { socket.emit('deleteWord', w); }
-    function forceWord(w) { socket.emit('forceWord', w); }
-
-    let lastStepDistance = 0;
-    let stepToggle = 1;
-
-    let currentFov = Math.PI / 8.8; 
-    const maxFov = Math.PI / 1.5;
-    
-    const stRadius = 3200;
-    const stations2D = [
-      {x: MAP_CENTER + stRadius * Math.cos(-Math.PI/2), y: MAP_CENTER + stRadius * Math.sin(-Math.PI/2)},    
-      {x: MAP_CENTER + stRadius * Math.cos(Math.PI/6), y: MAP_CENTER + stRadius * Math.sin(Math.PI/6)},      
-      {x: MAP_CENTER + stRadius * Math.cos(5*Math.PI/6), y: MAP_CENTER + stRadius * Math.sin(5*Math.PI/6)}   
-    ];
-
-    function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
-    function mapVal(n, start1, stop1, start2, stop2) { return ((n - start1) / (stop1 - start1)) * (stop2 - start2) + start2; }
-
-    const adjectives = ["활동적인", "조용한", "용감한", "소심한", "빛나는", "어두운", "지혜로운", "신비로운", "푸른", "붉은"];
-    const nouns = ["달팽이", "올빼미", "고양이", "늑대", "여우", "까마귀", "그림자", "별빛", "바람", "탐험가"];
-    function generateRandomRoomCode() { document.getElementById('roomCode').value = Math.floor(Math.random() * 9000 + 1000).toString(); }
-    function generateRandomName() { document.getElementById('pName').value = \`\${adjectives[Math.floor(Math.random() * adjectives.length)]} \${nouns[Math.floor(Math.random() * nouns.length)]}\`; }
-    window.onload = () => { generateRandomName(); generateRandomRoomCode(); };
-
-    function showSysMsg(text) {
-        let container = document.getElementById('sys-msg-container');
-        let div = document.createElement('div'); div.className = 'sys-msg'; div.innerText = text;
-        container.appendChild(div); setTimeout(() => div.remove(), 3000);
+let wordBank = ["진실"]; 
+db.ref('wordBank').once('value', (snap) => {
+    let words = snap.val();
+    if (words) {
+        wordBank = Object.keys(words);
+    } else {
+        wordBank = ["진실", "절망", "희망", "기억", "용기", "연대"];
+        wordBank.forEach(w => db.ref('wordBank/' + w).set(true));
     }
+    console.log(`[서버 준비 완료] 거대한 우물에 ${wordBank.length}개의 진실이 담겨 있습니다.`);
+});
 
-    socket.on('worldUpdate', (worldData) => {
-        if (serverWorld.targetWord !== worldData.targetWord) {
-            initCollisionLayer(worldData.targetWord); 
-            updateTruthVoxel(); 
-        }
-        serverWorld = worldData;
-    });
+const rooms = {};
 
-    socket.on('systemMessage', (msg) => showSysMsg(msg.text));
-    socket.on('receiveChat', (data) => {
-      let msgBox = document.getElementById('chat-messages');
-      let msgDiv = document.createElement('div'); msgDiv.className = 'chat-msg';
-      msgDiv.innerHTML = \`<span class="chat-sender" style="color:\${data.color}">\${data.sender}:</span><span>\${data.text}</span>\`;
-      msgBox.appendChild(msgDiv); msgBox.scrollTop = msgBox.scrollHeight;
-    });
-
-    function sendChatMessage() {
-      let input = document.getElementById('chat-input'); let val = input.value.trim();
-      if (val) { socket.emit('sendChat', val); input.value = ""; }
-    }
-    document.getElementById('chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
-    document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
-
-    socket.on('gameEnd', (data) => {
-        gameState = 'GAME_OVER';
-        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap', 'dev-ui'].forEach(id => document.getElementById(id).style.display = 'none');
-        document.getElementById('go-text').innerHTML = \`누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ \${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">\${data.winner}</b><br>소요 시간: \${data.time}초\`;
-        document.getElementById('go-record').innerHTML = data.isNewRecord ? \`✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨\` : \`🏆 최고 기록: \${data.bestRecord.name} (\${data.bestRecord.time}초)\`;
-        document.getElementById('game-over-ui').style.display = 'flex'; document.body.style.cursor = 'auto';
-    });
-
-    function submitAnswer() {
-      let ans = document.getElementById('ansInput').value;
-      if(ans) { socket.emit('submitAnswer', ans); document.getElementById('ansInput').value = ""; }
-    }
-    
-    socket.on('itemCollected', () => { 
-        battery = Math.min(100, battery + 10); 
-        currentFov = Math.min(maxFov, currentFov + Math.PI / 8); 
-    });
-
-    function startGame() {
-      const name = document.getElementById('pName').value.trim();
-      const room = document.getElementById('roomCode').value.trim();
-      if(!name || !room) { alert("방 코드와 이름을 모두 입력해주세요."); return; }
-      
-      myRoom = room; socket.emit('join', { name: name, room: room });
-      gameState = 'PLAY';
-      
-      document.getElementById('lobby-ui').style.display = 'none';
-      document.getElementById('answer-ui').style.display = 'flex';
-      document.getElementById('info-ui').style.display = 'flex';
-      document.getElementById('chat-ui').style.display = 'flex';
-      document.getElementById('minimap').style.display = 'block';
-      if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.getElementById('mobile-ui').style.display = 'block';
-      
-      canvas.focus(); document.body.style.cursor = 'none';
-    }
-
-    let collisionPixels;
-    function initCollisionLayer(word) {
-        let colCanvas = document.getElementById('colCanvas');
-        colCanvas.width = MAP_SIZE * COLLISION_SCALE; colCanvas.height = MAP_SIZE * COLLISION_SCALE;
-        let ctx = colCanvas.getContext('2d', { willReadFrequently: true });
-        ctx.clearRect(0, 0, colCanvas.width, colCanvas.height);
-        ctx.fillStyle = "white"; 
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = \`bold \${3500 * COLLISION_SCALE}px sans-serif\`;
-        ctx.fillText(word, colCanvas.width / 2, colCanvas.height / 2);
-        collisionPixels = ctx.getImageData(0, 0, colCanvas.width, colCanvas.height).data;
-    }
-
-    function checkPixelCollision(x, y) {
-      if(!collisionPixels) return false;
-      let rx = x - MAP_CENTER; let ry = y - MAP_CENTER;
-      let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
-      let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
-      let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
-      if (cx < 0 || cx >= Math.floor(MAP_SIZE*COLLISION_SCALE) || cy < 0 || cy >= Math.floor(MAP_SIZE*COLLISION_SCALE)) return false;
-      return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128; 
-    }
-
-    function isColliding(x, y) {
-      if (!collisionPixels) return false;
-      const angles = [0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, Math.PI*5/4, Math.PI*1.5, Math.PI*7/4];
-      for(let a of angles) {
-          if(checkPixelCollision(x + Math.cos(a)*playerPhysicsRadius, y + Math.sin(a)*playerPhysicsRadius)) return true;
-      }
-      return false;
-    }
-
-    function resolveCollision(dx, dy) {
-      if (!collisionPixels) return;
-      let nx = playerX + dx;
-      if (!isColliding(nx, playerY)) playerX = nx;
-      let ny = playerY + dy;
-      if (!isColliding(playerX, ny)) playerY = ny;
-
-      if (isColliding(playerX, playerY)) {
-        let pushed = false;
-        for (let r = 10; r < 500; r += 10) {
-          for (let theta = 0; theta < Math.PI*2; theta += Math.PI / 4) {
-            let tx = playerX + Math.cos(theta) * r; let ty = playerY + Math.sin(theta) * r;
-            if (!isColliding(tx, ty)) {
-              playerX = tx; playerY = ty; pushed = true; break;
-            }
-          }
-          if (pushed) break;
-        }
-      }
-    }
-
-    function placeFluorescentMark() {
-        let me = serverWorld.players[socket.id];
-        if (me && me.fCount > 0) {
-            socket.emit('useFluorescent', { x: playerX, y: playerY });
-            localFMarks.push({ id: "local_" + Date.now(), x: playerX, y: playerY });
-            if (localFMarks.length > 20) localFMarks.shift(); 
-            me.fCount--;
-        } else {
-            showSysMsg('형광물질이 없습니다.');
-        }
-    }
-
-    window.addEventListener('keydown', (e) => {
-      if (e.altKey && (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ')) {
-        let pwd = prompt("창조주의 권능을 깨우기 위한 암호를 입력하세요:");
-        if (pwd === "cjdrP119!") {
-            devModeActive = !devModeActive;
-            document.getElementById('dev-ui').style.display = devModeActive ? 'flex' : 'none';
-        }
-        return;
-      }
-      if (document.activeElement.tagName === 'INPUT') return;
-      let k = e.key.toLowerCase();
-      if (k === 'z' || k === 'ㅋ') { lanternOn = !lanternOn; }
-      if (k === 'x' || k === 'ㅌ') { placeFluorescentMark(); }
-      if (!e.repeat) activeKeys[k] = true;
-    });
-
-    window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
-    window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; isMoving = false; });
-
-    let joyZone = document.getElementById('joystick-zone'); let joyKnob = document.getElementById('joystick-knob');
-    let joyActive = false; let joyTouchId = null;
-    function updateJoystick(touch) {
-        let rect = joyZone.getBoundingClientRect();
-        let dx = touch.clientX - (rect.left + rect.width / 2); let dy = touch.clientY - (rect.top + rect.height / 2);
-        let distance = Math.hypot(dx, dy); let maxDist = 60; 
-        if (distance > maxDist) { dx = (dx / distance) * maxDist; dy = (dy / distance) * maxDist; }
-        joyKnob.style.transform = \`translate(calc(-50% + \${dx}px), calc(-50% + \${dy}px))\`;
-        joyDx = dx / maxDist; joyDy = dy / maxDist;
-    }
-    function stopJoystick(e) {
-        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = \`translate(-50%, -50%)\`; break; } } }
-    }
-    joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); if (!joyActive) { let t = e.changedTouches[0]; joyActive = true; joyTouchId = t.identifier; updateJoystick(t); }}, {passive: false});
-    joyZone.addEventListener('touchmove', (e) => { e.preventDefault(); if (joyActive) { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }}}, {passive: false});
-    joyZone.addEventListener('touchend', stopJoystick); joyZone.addEventListener('touchcancel', stopJoystick);
-    document.getElementById('btn-z').addEventListener('touchstart', (e) => { e.preventDefault(); lanternOn = !lanternOn; }, {passive: false});
-    document.getElementById('btn-x').addEventListener('touchstart', (e) => { e.preventDefault(); placeFluorescentMark(); }, {passive: false});
-    function toggleFullScreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
-
-    function handleInput() {
-      let dx = 0; let dy = 0; 
-      if (joyDx !== 0 || joyDy !== 0) { 
-          dx = joyDx * playerSpeed; dy = joyDy * playerSpeed; 
-      } else {
-          if (activeKeys['arrowleft'] || activeKeys['a'] || activeKeys['ㅁ']) dx -= playerSpeed;
-          if (activeKeys['arrowright'] || activeKeys['d'] || activeKeys['ㅇ']) dx += playerSpeed;
-          if (activeKeys['arrowup'] || activeKeys['w'] || activeKeys['ㅈ']) dy -= playerSpeed;
-          if (activeKeys['arrowdown'] || activeKeys['s'] || activeKeys['ㄴ']) dy += playerSpeed;
-      }
-      
-      isMoving = (dx !== 0 || dy !== 0);
-      if (isMoving) targetDir = Math.atan2(dy, dx);
-      let diff = targetDir - playerDir;
-      while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
-      playerDir += diff * 0.15;
-      
-      resolveCollision(dx, dy);
-
-      if (dist(playerX, playerY, MAP_CENTER, MAP_CENTER) > MAP_RADIUS + 15) {
-        let a = Math.atan2(playerY - MAP_CENTER, playerX - MAP_CENTER);
-        playerX = MAP_CENTER + Math.cos(a + Math.PI) * (MAP_RADIUS - 15);
-        playerY = MAP_CENTER + Math.sin(a + Math.PI) * (MAP_RADIUS - 15);
-      }
-    }
-
-    let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
-    let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
-    let stations3D = [];
-
-    function to3Dx(val) { return (val - MAP_CENTER) * 0.1; } 
-    function to3Dz(val) { return -(val - MAP_CENTER) * 0.1; } 
-
-    const createScene = function () {
-        const scene = new BABYLON.Scene(engine);
-        scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
-        scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
-
-        // Top-Down Camera Maintenance
-        bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
-        bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
-
-        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.05, 1), currentFov, 2, scene);
-        bLantern.diffuse = new BABYLON.Color3(1, 1, 1); 
-        bLantern.intensity = 100;
-        bLantern.range = 800; 
-
-        shadowGenerator = new BABYLON.ShadowGenerator(1024, bLantern);
-        shadowGenerator.useBlurExponentialShadowMap = true;
-        shadowGenerator.blurKernel = 32;
-        shadowGenerator.setDarkness(0.0); 
-        shadowGenerator.bias = 0.005; 
-
-        let atlas = new BABYLON.DynamicTexture("atlas", {width: 128, height: 64}, scene, false);
-        let aCtx = atlas.getContext();
-        aCtx.fillStyle = "#050508"; aCtx.fillRect(0,0,64,64);
-        aCtx.strokeStyle = "#11111a"; aCtx.lineWidth = 4; aCtx.strokeRect(0,0,64,64);
-        aCtx.fillStyle = "#ffffff"; aCtx.fillRect(64,0,64,64);
-        atlas.update();
-
-        let faceUV = new Array(6);
-        for(let i=0; i<6; i++) {
-            if (i === 4) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); } 
-            else if (i === 5) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); }
-            else { faceUV[i] = new BABYLON.Vector4(0.5, 0, 1.0, 1); } 
-        }
-
-        truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5.05, height: 15, depth: 5.05, faceUV: faceUV}, scene);
-        let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.diffuseTexture = atlas;
-        tMat.specularColor = new BABYLON.Color3(0, 0, 0); 
-        tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
-        tMat.maxSimultaneousLights = 4; 
-        truthBaseBox.material = tMat;
-        truthBaseBox.receiveShadows = true; 
-        shadowGenerator.addShadowCaster(truthBaseBox, true); 
-
-        const bottomGround = BABYLON.MeshBuilder.CreateCylinder("bg", {diameter: 800, height: 0.1}, scene);
-        bottomGround.position.y = -15;
-        let bgMat = new BABYLON.StandardMaterial("bgm", scene);
-        bgMat.diffuseColor = new BABYLON.Color3(0.01, 0.01, 0.02);
-        bgMat.maxSimultaneousLights = 4;
-        bottomGround.material = bgMat;
-        bottomGround.receiveShadows = true;
-
-        bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
-        let pMat = new BABYLON.StandardMaterial("pMat", scene);
-        pMat.emissiveColor = new BABYLON.Color3(1, 0.8, 0.5); pMat.disableLighting = true; bPlayer.material = pMat; bPlayer.position.y = 1.5;
-
-        playerTrailParticle = new BABYLON.ParticleSystem("trail", 500, scene);
-        let ptTex = new BABYLON.DynamicTexture("pt", 64, scene); let ptCtx = ptTex.getContext();
-        ptCtx.beginPath(); ptCtx.arc(32, 32, 30, 0, Math.PI*2);
-        let grd = ptCtx.createRadialGradient(32,32,0, 32,32,30);
-        grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(1, "rgba(255,255,255,0)");
-        ptCtx.fillStyle = grd; ptCtx.fill(); ptTex.update();
-        playerTrailParticle.particleTexture = ptTex; playerTrailParticle.emitter = bPlayer;
-        playerTrailParticle.minLifeTime = 0.5; playerTrailParticle.maxLifeTime = 1.0; playerTrailParticle.emitRate = 0;
-        playerTrailParticle.minSize = 1; playerTrailParticle.maxSize = 2.5;
-        playerTrailParticle.color1 = new BABYLON.Color4(1, 0.8, 0.2, 0.8); playerTrailParticle.color2 = new BABYLON.Color4(1, 0.4, 0, 0.2); playerTrailParticle.colorDead = new BABYLON.Color4(0, 0, 0, 0);
-        playerTrailParticle.start();
-
-        stations2D.forEach((s, i) => {
-            let cx = to3Dx(s.x); let cz = to3Dz(s.y);
-            let cyl = BABYLON.MeshBuilder.CreateCylinder("st"+i, {height: 20, diameter: 10}, scene);
-            cyl.position = new BABYLON.Vector3(cx, 10, cz);
-            let cMat = new BABYLON.StandardMaterial("cMat", scene);
-            cMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3); cMat.alpha = 0.3; cMat.disableLighting = true;
-            cyl.material = cMat;
-            
-            let halo = BABYLON.MeshBuilder.CreateCylinder("stHalo"+i, {height: 30, diameter: 22, tessellation: 16}, scene);
-            halo.position = new BABYLON.Vector3(cx, 15, cz);
-            let hMat = new BABYLON.StandardMaterial("hMat", scene);
-            hMat.emissiveColor = new BABYLON.Color3(0, 1, 0.6); hMat.alpha = 0.2; hMat.wireframe = true; hMat.disableLighting = true;
-            halo.material = hMat;
-
-            stations3D.push({ mesh: cyl, halo: halo });
-        });
-
-        return scene;
+function createRoom(roomId) {
+    let newWorld = {
+        angle: 0,
+        targetWord: wordBank.length > 0 ? wordBank[Math.floor(Math.random() * wordBank.length)] : "진실",
+        players: {},
+        items: [],
+        enemies: [],
+        footprints: [],
+        meteors: [], // 찰나의 구원
+        fItems: [],  // 운석이 남긴 형광물질
+        fMarks: [],  // 탐험가가 새긴 영구적인 빛
+        lastMeteorTime: Date.now(),
+        serverTime: Date.now(),
+        gameStartTime: Date.now() // 진실을 향한 여정의 시작
     };
 
-    bScene = createScene();
-
-    function updateTruthVoxel() {
-        if(!collisionPixels) return;
-        let matrices = [];
-        let mapScale = MAP_SIZE * COLLISION_SCALE; 
-
-        for(let cy=0; cy<mapScale; cy+=5){ 
-            for(let cx=0; cx<mapScale; cx+=5){
-                let rx = cx - 400; let ry = cy - 400;
-                if (rx*rx + ry*ry > 400*400) continue; 
-
-                let idx = (cy * mapScale + cx) * 4;
-                if(collisionPixels[idx + 3] <= 128) { 
-                    let x3D = rx; 
-                    let z3D = -ry; 
-                    let m = BABYLON.Matrix.Translation(x3D, -7.5, z3D); 
-                    for(let i=0; i<16; i++) matrices.push(m.m[i]);
-                }
-            }
-        }
-        if(matrices.length > 0) truthBaseBox.thinInstanceSetBuffer("matrix", new Float32Array(matrices), 16);
-        truthBaseBox.rotation.y = serverWorld.angle;
+    for(let i=0; i<15; i++) {
+        let r = Math.random() * (MAP_RADIUS - 500) + 500;
+        let a = Math.random() * Math.PI * 2;
+        newWorld.items.push({ x: MAP_CENTER + r*Math.cos(a), y: MAP_CENTER + r*Math.sin(a), active: true });
     }
-
-    function drawMinimap() {
-        if (!collisionPixels) return; 
-
-        let mm = document.getElementById('minimap');
-        let ctx = mm.getContext('2d');
-        let colCanvas = document.getElementById('colCanvas'); 
-        let mmSize = 110; let scale = mmSize / 2500; 
-        
-        ctx.clearRect(0, 0, mmSize*2, mmSize*2);
-        ctx.save(); 
-        ctx.translate(mmSize, mmSize);
-
-        ctx.beginPath();
-        ctx.arc(0, 0, mmSize, 0, Math.PI * 2);
-        ctx.clip();
-
-        ctx.fillStyle = "#1a1a24"; 
-        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
-
-        ctx.save();
-        let dx = (MAP_CENTER - playerX) * scale; 
-        let dy = (MAP_CENTER - playerY) * scale;
-        ctx.translate(dx, dy);
-        ctx.rotate(serverWorld.angle);
-        let drawSize = MAP_SIZE * scale;
-        ctx.drawImage(colCanvas, -drawSize/2, -drawSize/2, drawSize, drawSize);
-        ctx.restore();
-
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = "rgba(0, 0, 0, 0.98)"; 
-        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
-
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = "white";
-
-        if (lanternOn) {
-            ctx.beginPath();
-            ctx.moveTo(0, 0); 
-            let numRays = 40; 
-            let startA = playerDir - currentFov/2;
-            let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
-            
-            let hitPoints = []; 
-
-            for(let i=0; i<=numRays; i++){
-                let a = startA + (i/numRays)*currentFov;
-                let d = 0; let maxD = 900; let step = 20; 
-                let hit = false;
-                while(d < maxD){
-                    d += step;
-                    let tx = playerX + Math.cos(a)*d; let ty = playerY + Math.sin(a)*d;
-                    let rx = tx - MAP_CENTER; let ry = ty - MAP_CENTER;
-                    let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
-                    let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
-                    if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
-                        if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
-                            hit = true; break; 
-                        }
-                    }
-                }
-                ctx.lineTo(Math.cos(a)*d*scale, Math.sin(a)*d*scale);
-                if(hit) hitPoints.push({d: d, a: a});
-            }
-            ctx.closePath(); ctx.fill();
-
-            for(let hp of hitPoints) {
-                ctx.beginPath();
-                ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 150 * scale, 0, Math.PI*2);
-                ctx.fill();
-            }
+    for (let r = 800; r < MAP_RADIUS - 200; r += 600) {
+        let numEnemies = Math.floor((Math.PI * 2) * r / 1800); 
+        for (let i = 0; i < numEnemies; i++) {
+           let a = ((Math.PI * 2) / numEnemies) * i + (Math.random() * 0.4 - 0.2); 
+           newWorld.enemies.push({
+             x: MAP_CENTER + r*Math.cos(a), y: MAP_CENTER + r*Math.sin(a), 
+             type: Math.random() < 0.5 ? 'red' : 'blue',
+             active: true, wanderAngle: Math.random() * Math.PI * 2
+           });
         }
-        
-        ctx.beginPath(); ctx.arc(0, 0, 55 * scale, 0, Math.PI*2); ctx.fill(); 
-
-        if(serverWorld.meteors) {
-            serverWorld.meteors.forEach(m => {
-                let age = serverWorld.serverTime - m.startTime; 
-                let mRad = mapVal(age, 0, m.duration, 500, 0) * scale;
-                if(mRad > 0) { 
-                    let mx = (m.x - playerX) * scale; let my = (m.y - playerY) * scale; 
-                    ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill(); 
-                }
-            });
-        }
-        
-        let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
-        allFMarks.forEach(mk => {
-            let mx = (mk.x - playerX) * scale; let my = (mk.y - playerY) * scale; 
-            ctx.beginPath(); ctx.arc(mx, my, 400 * scale, 0, Math.PI*2); ctx.fill(); 
-        });
-
-        ctx.globalCompositeOperation = 'source-over';
-        stations2D.forEach(s => { 
-            let sx = (s.x - playerX) * scale; let sy = (s.y - playerY) * scale; 
-            ctx.fillStyle = "#00ff33"; ctx.font = "18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⚡", sx, sy); 
-        });
-
-        ctx.fillStyle = "#ffcc00"; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
-        for (let id in serverWorld.players) {
-            if (id === socket.id) continue; let op = serverWorld.players[id];
-            let opx = (op.x - playerX) * scale; let opy = (op.y - playerY) * scale;
-            ctx.fillStyle = op.color || "white"; ctx.beginPath(); ctx.arc(opx, opy, 4, 0, Math.PI*2); ctx.fill();
-        }
-        ctx.restore();
     }
+    rooms[roomId] = newWorld;
+    console.log(`[차원 생성] 새로운 방이 열렸습니다: ${roomId}`);
+}
 
-    engine.runRenderLoop(() => {
-      if (gameState !== 'PLAY') { bScene.render(); return; }
+io.on('connection', (socket) => {
+    socket.emit('wordBankUpdate', wordBank);
 
-      if (lanternOn) { battery -= batteryDrain; if (battery < 0) battery = 0; }
-      if (battery <= 0) lanternOn = false;
-      
-      let oldX = playerX, oldY = playerY;
-      handleInput(); 
-      socket.emit('move', { x: playerX, y: playerY, dir: playerDir, lantern: lanternOn });
+    socket.on('join', (data) => {
+        let roomId = data.room;
+        socket.join(roomId);
+        socket.roomId = roomId; 
 
-      let movedDist = dist(oldX, oldY, playerX, playerY);
-      if (movedDist > 0) {
-          lastStepDistance += movedDist;
-          if (lastStepDistance > 35) {
-              lastStepDistance = 0;
-              let pa = playerDir + (Math.PI / 2) * stepToggle;
-              let fx = playerX + Math.cos(pa) * 8; let fy = playerY + Math.sin(pa) * 8;
-              socket.emit('footprint', { x: fx, y: fy, angle: playerDir });
-              stepToggle *= -1;
-              
-              let fp = BABYLON.MeshBuilder.CreatePlane("fp", {width: 1.5, height: 2.5}, bScene);
-              fp.position = new BABYLON.Vector3(to3Dx(fx), 0.1, to3Dz(fy));
-              fp.rotation.x = Math.PI / 2; fp.rotation.y = -playerDir + Math.PI/2; 
-              let fpMat = new BABYLON.StandardMaterial("fpMat", bScene);
-              fpMat.emissiveColor = new BABYLON.Color3(0.8, 0.6, 0.2);
-              fpMat.disableLighting = true; fpMat.alpha = 0.6; fp.material = fpMat;
-              
-              let alpha = 0.6;
-              let fade = setInterval(() => {
-                  alpha -= 0.05;
-                  if (alpha <= 0) { fp.dispose(); clearInterval(fade); } else { fpMat.alpha = alpha; }
-              }, 300);
-          }
-      }
+        if (!rooms[roomId]) createRoom(roomId);
+        let world = rooms[roomId];
 
-      playerTrailParticle.emitRate = isMoving ? 50 : 0;
-
-      stations2D.forEach(s => { if (dist(playerX, playerY, s.x, s.y) < 100) battery = Math.min(100, battery + 1.5); });
-      
-      let timeOffset = Date.now() * 0.001;
-      stations3D.forEach((st, i) => {
-          st.halo.rotation.y += 0.01;
-          st.halo.position.y = 15 + Math.sin(timeOffset + i) * 2;
-      });
-
-      let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
-      bPlayer.position.x = px3; bPlayer.position.z = pz3;
-      bCamera.position.x = px3; bCamera.position.z = pz3;
-
-      let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
-      bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
-      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
-      
-      bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
-      if(fullVision) {
-          bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-      } else {
-          bScene.ambientColor = new BABYLON.Color3(0, 0, 0);
-      }
-      
-      bLantern.angle = currentFov; 
-      truthBaseBox.rotation.y = serverWorld.angle;
-
-      let currentItemIds = [];
-      if(serverWorld.items) {
-          for(let i=0; i<serverWorld.items.length; i++) {
-              let item = serverWorld.items[i];
-              if(item.active && dist(playerX, playerY, item.x, item.y) < 50) { socket.emit('collectItem', i); }
-          }
-          serverWorld.items.forEach((item, i) => {
-             if(item.active) {
-                 let safeId = i.toString();
-                 currentItemIds.push(safeId);
-                 if(!meshDict.items[safeId]) {
-                     let im = BABYLON.MeshBuilder.CreateSphere("it_"+safeId, {diameter: 2.5}, bScene);
-                     let imat = new BABYLON.StandardMaterial("itm_"+safeId, bScene);
-                     imat.emissiveColor = new BABYLON.Color3(1, 0.8, 0); imat.disableLighting = true; im.material = imat;
-                     meshDict.items[safeId] = im;
-                 }
-                 meshDict.items[safeId].position = new BABYLON.Vector3(to3Dx(item.x), 2 + Math.sin(timeOffset*2 + i), to3Dz(item.y));
-             }
-          });
-      }
-      for(let key in meshDict.items) { if(!currentItemIds.includes(key)) { meshDict.items[key].dispose(); delete meshDict.items[key]; } }
-
-      let currentFItemIds = [];
-      if(serverWorld.fItems) {
-          serverWorld.fItems.forEach((fi, idx) => {
-              let safeId = fi.id !== undefined ? fi.id.toString() : \`fit_\${idx}_\${Math.floor(fi.x)}\`;
-              currentFItemIds.push(safeId);
-              if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
-              
-              if(!meshDict.fItems[safeId]) {
-                  let fm = BABYLON.MeshBuilder.CreateBox("fMesh_"+safeId, {size: 1.5}, bScene);
-                  let fmat = new BABYLON.StandardMaterial("fMat_"+safeId, bScene);
-                  fmat.emissiveColor = new BABYLON.Color3(0, 1, 1); fmat.disableLighting = true; fm.material = fmat;
-                  meshDict.fItems[safeId] = fm;
-              }
-              meshDict.fItems[safeId].position = new BABYLON.Vector3(to3Dx(fi.x), 2 + Math.cos(timeOffset*2 + fi.x), to3Dz(fi.y));
-              meshDict.fItems[safeId].rotation.x += 0.02; meshDict.fItems[safeId].rotation.y += 0.02;
-          });
-      }
-      for(let key in meshDict.fItems) { if(!currentFItemIds.includes(key)) { meshDict.fItems[key].dispose(); delete meshDict.fItems[key]; } }
-
-      let currentFMarkIds = [];
-      let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
-      allFMarks.forEach((mk, idx) => {
-          let safeId = mk.id !== undefined ? mk.id.toString() : \`fm_local_\${idx}_\${Math.floor(mk.x)}\`;
-          currentFMarkIds.push(safeId);
-          if(!meshDict.fMarks[safeId]) {
-              let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 2, to3Dz(mk.y)), bScene);
-              fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; fml.range = 60;
-              
-              let fm = BABYLON.MeshBuilder.CreatePolyhedron("fmm_"+safeId, {sizeX: 1, sizeY: 2, sizeZ: 1}, bScene);
-              fm.position = new BABYLON.Vector3(to3Dx(mk.x), 1, to3Dz(mk.y));
-              let fmat = new BABYLON.StandardMaterial("fmmat_"+safeId, bScene);
-              fmat.emissiveColor = new BABYLON.Color3(0, 1, 1); fmat.disableLighting = true; fm.material = fmat;
-              
-              meshDict.fMarks[safeId] = { light: fml, mesh: fm };
-          }
-          meshDict.fMarks[safeId].mesh.rotation.y += 0.05;
-      });
-      for(let key in meshDict.fMarks) { 
-          if(!currentFMarkIds.includes(key)) { 
-              meshDict.fMarks[key].light.dispose(); 
-              meshDict.fMarks[key].mesh.dispose(); 
-              delete meshDict.fMarks[key]; 
-          } 
-      }
-
-      for (let id in serverWorld.players) {
-        if (id === socket.id) continue;
-        let p = serverWorld.players[id];
-        if (!meshDict.players[id]) {
-            let m = BABYLON.MeshBuilder.CreateSphere("p_"+id, {diameter: 3}, bScene);
-            let mat = new BABYLON.StandardMaterial("pm_"+id, bScene);
-            mat.emissiveColor = BABYLON.Color3.FromHexString(p.color || "#ffffff"); mat.disableLighting = true; m.material = mat; m.position.y = 1.5;
-            let l = new BABYLON.SpotLight("pl_"+id, BABYLON.Vector3.Zero(), BABYLON.Vector3.Zero(), Math.PI/2.5, 2, bScene);
-            l.diffuse = BABYLON.Color3.FromHexString(p.color || "#ffffff"); l.range = 250;
-            meshDict.players[id] = { mesh: m, light: l };
-        }
-        let opx3 = to3Dx(p.x); let opz3 = to3Dz(p.y);
-        meshDict.players[id].mesh.position.x = opx3; meshDict.players[id].mesh.position.z = opz3;
-        meshDict.players[id].light.position = new BABYLON.Vector3(opx3, 4, opz3);
-        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.05, -Math.sin(p.dir));
-        meshDict.players[id].light.intensity = p.lantern ? 20 : 0;
-      }
-      for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
-
-      serverWorld.enemies.forEach((e, i) => {
-        if (!e.active) { 
-            if(meshDict.enemies[i]) { 
-                meshDict.enemies[i].mesh.dispose(); 
-                meshDict.enemies[i].t1.dispose(); meshDict.enemies[i].t2.dispose(); 
-                delete meshDict.enemies[i]; 
-            } 
-            return; 
-        }
-        if (dist(playerX, playerY, e.x, e.y) < playerRadius + 15) { battery -= 5; if(battery<0) battery=0; }
-        if (!meshDict.enemies[i]) {
-            let m = BABYLON.MeshBuilder.CreateSphere("e_"+i, {diameter: 4}, bScene);
-            let mat = new BABYLON.StandardMaterial("em_"+i, bScene);
-            mat.emissiveColor = e.type === 'red' ? new BABYLON.Color3(0.8, 0, 0) : new BABYLON.Color3(0, 0.4, 0.8);
-            mat.disableLighting = true; m.material = mat; m.position.y = 3; 
-
-            let t1 = BABYLON.MeshBuilder.CreateTorus("et1_"+i, {diameter: 7, thickness: 0.5, tessellation: 8}, bScene);
-            t1.material = mat; t1.parent = m; t1.rotation.x = Math.PI/2;
-            let t2 = BABYLON.MeshBuilder.CreateTorus("et2_"+i, {diameter: 9, thickness: 0.3, tessellation: 5}, bScene);
-            t2.material = mat; t2.parent = m;
-
-            meshDict.enemies[i] = { mesh: m, t1: t1, t2: t2 };
-        }
-        meshDict.enemies[i].mesh.position.x = to3Dx(e.x); meshDict.enemies[i].mesh.position.z = to3Dz(e.y);
-        meshDict.enemies[i].t1.rotation.y += 0.08; meshDict.enemies[i].t1.rotation.z += 0.05;
-        meshDict.enemies[i].t2.rotation.x += 0.06; meshDict.enemies[i].t2.rotation.z -= 0.07;
-      });
-
-      if(serverWorld.meteors) {
-          serverWorld.meteors.forEach((m, i) => {
-             let age = serverWorld.serverTime - m.startTime;
-             if (age > m.duration) return;
-             if(!meshDict.meteors[m.startTime]) {
-                 let ml = new BABYLON.PointLight("ml_"+m.startTime, new BABYLON.Vector3(to3Dx(m.x), 20, to3Dz(m.y)), bScene);
-                 ml.diffuse = new BABYLON.Color3(1, 0.3, 0.05); ml.range = 150; 
-                 meshDict.meteors[m.startTime] = { light: ml };
-             }
-             meshDict.meteors[m.startTime].light.intensity = mapVal(age, 0, m.duration, 20, 0); 
-          });
-      }
-      for(let key in meshDict.meteors) { if(!serverWorld.meteors || !serverWorld.meteors.find(m => m.startTime.toString() === key)) { meshDict.meteors[key].light.dispose(); delete meshDict.meteors[key]; } }
-
-      let pCount = Object.keys(serverWorld.players).length;
-      let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
-      document.getElementById('room-info').innerText = \`방: \${myRoom} | 현재 탐험가: \${pCount}명\`;
-      let bBar = document.getElementById('battery-bar');
-      bBar.style.width = battery + '%'; bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
-      document.getElementById('fitem-info').innerText = \`형광물질 (X키: 붓칠): \${fCount}개\`;
-      
-      let now = Date.now();
-      if(!window.gameStartTime) window.gameStartTime = now;
-      let tStr = ((now - window.gameStartTime)/1000).toFixed(1);
-      document.getElementById('time-info').innerText = \`⏱ 흐르는 시간: \${tStr}초\`;
-      
-      drawMinimap();
-      bScene.render();
+        world.players[socket.id] = { 
+            name: data.name, 
+            x: MAP_CENTER, 
+            y: MAP_CENTER + MAP_RADIUS - 80, 
+            dir: -Math.PI/2, 
+            lantern: true, 
+            fCount: 0, 
+            color: PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)] 
+        };
+        io.to(roomId).emit('systemMessage', { text: data.name + ' 님이 어둠 속에 발을 들였습니다.' });
     });
 
-    window.addEventListener("resize", () => { engine.resize(); });
-  </script>
-</body>
-</html>
+    socket.on('move', (data) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId] && rooms[roomId].players[socket.id]) {
+            let p = rooms[roomId].players[socket.id];
+            p.x = data.x; p.y = data.y; p.dir = data.dir; p.lantern = data.lantern;
+        }
+    });
+
+    socket.on('footprint', (data) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            rooms[roomId].footprints.push({ x: data.x, y: data.y, angle: data.angle, time: Date.now() });
+        }
+    });
+
+    socket.on('collectItem', (index) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            let world = rooms[roomId];
+            if (world.items[index] && world.items[index].active) {
+                world.items[index].active = false;
+                socket.emit('itemCollected'); 
+            }
+        }
+    });
+
+    // 형광물질 수집 섭리
+    socket.on('collectFItem', (id) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            let world = rooms[roomId];
+            let itemIdx = world.fItems.findIndex(f => f.id === id);
+            if (itemIdx !== -1) {
+                world.fItems.splice(itemIdx, 1);
+                if (world.players[socket.id]) {
+                    world.players[socket.id].fCount = (world.players[socket.id].fCount || 0) + 1;
+                }
+            }
+        }
+    });
+
+    // 채팅 메시지 전송
+    socket.on('sendChat', (msg) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId] && rooms[roomId].players[socket.id]) {
+            let p = rooms[roomId].players[socket.id];
+            io.to(roomId).emit('receiveChat', { sender: p.name, text: msg, color: p.color });
+        }
+    });
+
+    // 형광물질 사용 섭리
+    socket.on('useFluorescent', (data) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId] && rooms[roomId].players[socket.id]) {
+            let p = rooms[roomId].players[socket.id];
+            if (p.fCount > 0) {
+                p.fCount--;
+                rooms[roomId].fMarks.push({ x: data.x, y: data.y });
+                io.to(roomId).emit('systemMessage', { text: `✨ ${p.name}님이 진실의 조각 위에 지워지지 않는 형광물질을 발랐습니다!` });
+            }
+        }
+    });
+
+    socket.on('addWord', (word) => { 
+        if (!wordBank.includes(word)) { 
+            wordBank.push(word); db.ref('wordBank/' + word).set(true); 
+            io.emit('wordBankUpdate', wordBank); 
+        } 
+    });
+    
+    socket.on('deleteWord', (word) => { 
+        wordBank = wordBank.filter(w => w !== word); db.ref('wordBank/' + word).remove(); 
+        io.emit('wordBankUpdate', wordBank); 
+    });
+    
+    socket.on('forceWord', (word) => { 
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            rooms[roomId].targetWord = word; 
+            rooms[roomId].gameStartTime = Date.now(); // 강제 출제 시 타이머 초기화
+            io.to(roomId).emit('worldUpdate', rooms[roomId]); 
+        }
+    });
+
+    // 정답 제출 및 최고 기록 판별 섭리
+    socket.on('submitAnswer', (answer) => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            let world = rooms[roomId];
+            if (answer.trim() === world.targetWord) {
+                let winner = world.players[socket.id] ? world.players[socket.id].name : '누군가';
+                let endTime = Date.now();
+                let timeTaken = ((endTime - world.gameStartTime) / 1000).toFixed(2);
+
+                // 파이어베이스에서 이 단어의 기존 기록을 불러옵니다.
+                db.ref('records/' + world.targetWord).once('value', (snap) => {
+                    let record = snap.val();
+                    let isNewRecord = false;
+
+                    if (!record || parseFloat(timeTaken) < record.time) {
+                        isNewRecord = true;
+                        record = { time: parseFloat(timeTaken), name: winner };
+                        db.ref('records/' + world.targetWord).set(record);
+                    }
+
+                    // 모두에게 승전보를 울립니다.
+                    io.to(roomId).emit('gameEnd', { 
+                        winner: winner, 
+                        word: world.targetWord, 
+                        time: timeTaken,
+                        bestRecord: record,
+                        isNewRecord: isNewRecord
+                    });
+                    
+                    // 탐험가들이 진실의 제단(결과창)을 여유롭게 바라볼 수 있도록 10초 후 세상을 닫습니다.
+                    setTimeout(() => {
+                        delete rooms[roomId];
+                    }, 10000);
+                });
+            } else {
+                socket.emit('systemMessage', { text: '틀렸습니다. 어둠 속을 더 깊이 관찰하세요.' });
+            }
+        }
+    });
+
+    socket.on('disconnect', () => {
+        let roomId = socket.roomId;
+        if (roomId && rooms[roomId]) {
+            let pName = rooms[roomId].players[socket.id] ? rooms[roomId].players[socket.id].name : '누군가';
+            io.to(roomId).emit('systemMessage', { text: pName + ' 님의 빛이 스러졌습니다.' });
+            delete rooms[roomId].players[socket.id];
+            if (Object.keys(rooms[roomId].players).length === 0) delete rooms[roomId];
+        }
+    });
+});
+
+setInterval(() => {
+    let now = Date.now();
+    for (let roomId in rooms) {
+        let world = rooms[roomId];
+        world.angle += 0.002;
+        world.serverTime = now;
+        
+        // 8초 간격 - 광활한 맵 전체 무작위 운석 투하
+        if (now - world.lastMeteorTime > 8000) { 
+            world.lastMeteorTime = now; 
+            let count = Math.floor(Math.random() * 2) + 1;
+            
+            for(let i=0; i<count; i++) {
+                let r = Math.random() * MAP_RADIUS;
+                let a = Math.random() * Math.PI * 2;
+                let tx = MAP_CENTER + r * Math.cos(a);
+                let ty = MAP_CENTER + r * Math.sin(a);
+
+                world.meteors.push({ x: tx, y: ty, startTime: now, duration: 4000 });
+                // 운석이 떨어진 자리에 형광물질 아이템(fItem) 생성
+                world.fItems.push({ id: Math.random().toString(36).substr(2,9), x: tx, y: ty, active: true });
+            }
+            io.to(roomId).emit('systemMessage', { text: '🌠 하늘에서 별의 조각이 떨어졌습니다! 미니맵을 확인하세요.' });
+        }
+        
+        world.meteors = world.meteors.filter(m => now - m.startTime < m.duration); 
+        world.footprints = world.footprints.filter(fp => now - fp.time < 12000);
+
+        for (let e of world.enemies) {
+            if (!e.active) continue;
+            let closestP = null; let minDist = Infinity;
+            for (let id in world.players) {
+                let p = world.players[id];
+                let d = Math.hypot(e.x - p.x, e.y - p.y);
+                if (d < minDist) { minDist = d; closestP = p; }
+            }
+
+            let inLight = false;
+            if (closestP) {
+                if (minDist < 55) inLight = true;
+                else if (closestP.lantern && minDist < 900) {
+                    let angleToE = Math.atan2(e.y - closestP.y, e.x - closestP.x);
+                    let angleDiff = Math.abs(angleToE - closestP.dir);
+                    if (angleDiff > Math.PI) angleDiff = (Math.PI * 2) - angleDiff;
+                    if (angleDiff <= (Math.PI / 8.8) / 2) inLight = true;
+                }
+            }
+            e.inLight = inLight;
+
+            if (e.type === 'red' && inLight && closestP) {
+                let a = Math.atan2(closestP.y - e.y, closestP.x - e.x);
+                e.x += Math.cos(a) * 4.5; e.y += Math.sin(a) * 4.5; e.wanderAngle = a;
+            } else if (e.type === 'blue') {
+                let tracking = false; let targetFP = null; let closestDist = 300;
+                for (let fp of world.footprints) {
+                    let dFp = Math.hypot(e.x - fp.x, e.y - fp.y);
+                    if (dFp < closestDist) { closestDist = dFp; targetFP = fp; tracking = true; }
+                }
+                if (tracking && targetFP) {
+                    let a = Math.atan2(targetFP.y - e.y, targetFP.x - e.x);
+                    e.x += Math.cos(a) * 4.5; e.y += Math.sin(a) * 4.5; e.wanderAngle = a;
+                    if (Math.hypot(e.x - targetFP.x, e.y - targetFP.y) < 15) {
+                        world.footprints = world.footprints.filter(fp => fp !== targetFP);
+                    }
+                } else {
+                    if (Math.random() < 0.02) e.wanderAngle += (Math.random() - 0.5) * Math.PI;
+                    e.x += Math.cos(e.wanderAngle) * 1.5; e.y += Math.sin(e.wanderAngle) * 1.5;
+                }
+            }
+
+            if (Math.hypot(e.x - MAP_CENTER, e.y - MAP_CENTER) > MAP_RADIUS) {
+                let a = Math.atan2(e.y - MAP_CENTER, e.x - MAP_CENTER);
+                e.x = MAP_CENTER + Math.cos(a + Math.PI) * (MAP_RADIUS - 15);
+                e.y = MAP_CENTER + Math.sin(a + Math.PI) * (MAP_RADIUS - 15);
+            }
+        }
+        io.to(roomId).emit('worldUpdate', world);
+    }
+}, 1000 / 30);
+
+server.listen(3000, () => {
+    console.log("심연의 문이 열렸습니다. http://localhost:3000 으로 접속하세요.");
+});
