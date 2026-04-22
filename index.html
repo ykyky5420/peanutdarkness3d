@@ -134,11 +134,9 @@
   <canvas id="colCanvas" style="display:none;"></canvas>
 
   <script>
-    // 현재 접속한 도메인 주소(Render에서 제공한 주소)를 명시적으로 찾아서 꽂아줍니다.
-    const socket = io(window.location.origin, {
-        transports: ['websocket', 'polling'] // WebSocket을 최우선으로 강제합니다.
-    });
+    const socket = io({ transports: ['websocket', 'polling'] });
     const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
     
     let gameState = 'LOBBY';
     let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
@@ -170,11 +168,11 @@
       words.forEach(w => {
         let li = document.createElement('li');
         li.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px;";
-        li.innerHTML = \`<span>\${w}</span>
+        li.innerHTML = `<span>${w}</span>
                         <div>
-                          <button onclick="forceWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
-                          <button onclick="deleteWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
-                        </div>\`;
+                          <button onclick="forceWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
+                          <button onclick="deleteWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
+                        </div>`;
         ul.appendChild(li);
       });
     });
@@ -202,7 +200,7 @@
     const adjectives = ["활동적인", "조용한", "용감한", "소심한", "빛나는", "어두운", "지혜로운", "신비로운", "푸른", "붉은"];
     const nouns = ["달팽이", "올빼미", "고양이", "늑대", "여우", "까마귀", "그림자", "별빛", "바람", "탐험가"];
     function generateRandomRoomCode() { document.getElementById('roomCode').value = Math.floor(Math.random() * 9000 + 1000).toString(); }
-    function generateRandomName() { document.getElementById('pName').value = \`\${adjectives[Math.floor(Math.random() * adjectives.length)]} \${nouns[Math.floor(Math.random() * nouns.length)]}\`; }
+    function generateRandomName() { document.getElementById('pName').value = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`; }
     window.onload = () => { generateRandomName(); generateRandomRoomCode(); };
 
     function showSysMsg(text) {
@@ -223,7 +221,7 @@
     socket.on('receiveChat', (data) => {
       let msgBox = document.getElementById('chat-messages');
       let msgDiv = document.createElement('div'); msgDiv.className = 'chat-msg';
-      msgDiv.innerHTML = \`<span class="chat-sender" style="color:\${data.color}">\${data.sender}:</span><span>\${data.text}</span>\`;
+      msgDiv.innerHTML = `<span class="chat-sender" style="color:${data.color}">${data.sender}:</span><span>${data.text}</span>`;
       msgBox.appendChild(msgDiv); msgBox.scrollTop = msgBox.scrollHeight;
     });
 
@@ -237,8 +235,8 @@
     socket.on('gameEnd', (data) => {
         gameState = 'GAME_OVER';
         ['mobile-ui','chat-ui','answer-ui','info-ui','minimap', 'dev-ui'].forEach(id => document.getElementById(id).style.display = 'none');
-        document.getElementById('go-text').innerHTML = \`누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ \${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">\${data.winner}</b><br>소요 시간: \${data.time}초\`;
-        document.getElementById('go-record').innerHTML = data.isNewRecord ? \`✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨\` : \`🏆 최고 기록: \${data.bestRecord.name} (\${data.bestRecord.time}초)\`;
+        document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
+        document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
         document.getElementById('game-over-ui').style.display = 'flex'; document.body.style.cursor = 'auto';
     });
 
@@ -278,7 +276,7 @@
         ctx.clearRect(0, 0, colCanvas.width, colCanvas.height);
         ctx.fillStyle = "white"; 
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = \`bold \${3500 * COLLISION_SCALE}px sans-serif\`;
+        ctx.font = `bold ${3500 * COLLISION_SCALE}px sans-serif`;
         ctx.fillText(word, colCanvas.width / 2, colCanvas.height / 2);
         collisionPixels = ctx.getImageData(0, 0, colCanvas.width, colCanvas.height).data;
     }
@@ -361,11 +359,11 @@
         let dx = touch.clientX - (rect.left + rect.width / 2); let dy = touch.clientY - (rect.top + rect.height / 2);
         let distance = Math.hypot(dx, dy); let maxDist = 60; 
         if (distance > maxDist) { dx = (dx / distance) * maxDist; dy = (dy / distance) * maxDist; }
-        joyKnob.style.transform = \`translate(calc(-50% + \${dx}px), calc(-50% + \${dy}px))\`;
+        joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
         joyDx = dx / maxDist; joyDy = dy / maxDist;
     }
     function stopJoystick(e) {
-        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = \`translate(-50%, -50%)\`; break; } } }
+        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = `translate(-50%, -50%)`; break; } } }
     }
     joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); if (!joyActive) { let t = e.changedTouches[0]; joyActive = true; joyTouchId = t.identifier; updateJoystick(t); }}, {passive: false});
     joyZone.addEventListener('touchmove', (e) => { e.preventDefault(); if (joyActive) { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }}}, {passive: false});
@@ -412,7 +410,6 @@
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
         scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
-        // Top-Down Camera Maintenance
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
@@ -509,8 +506,8 @@
 
                 let idx = (cy * mapScale + cx) * 4;
                 if(collisionPixels[idx + 3] <= 128) { 
-                    let x3D = rx; 
-                    let z3D = -ry; 
+                    let x3D = rx * 0.1; 
+                    let z3D = -ry * 0.1; 
                     let m = BABYLON.Matrix.Translation(x3D, -7.5, z3D); 
                     for(let i=0; i<16; i++) matrices.push(m.m[i]);
                 }
@@ -714,7 +711,7 @@
       let currentFItemIds = [];
       if(serverWorld.fItems) {
           serverWorld.fItems.forEach((fi, idx) => {
-              let safeId = fi.id !== undefined ? fi.id.toString() : \`fit_\${idx}_\${Math.floor(fi.x)}\`;
+              let safeId = fi.id !== undefined ? fi.id.toString() : `fit_${idx}_${Math.floor(fi.x)}`;
               currentFItemIds.push(safeId);
               if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
               
@@ -733,7 +730,7 @@
       let currentFMarkIds = [];
       let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
       allFMarks.forEach((mk, idx) => {
-          let safeId = mk.id !== undefined ? mk.id.toString() : \`fm_local_\${idx}_\${Math.floor(mk.x)}\`;
+          let safeId = mk.id !== undefined ? mk.id.toString() : `fm_local_${idx}_${Math.floor(mk.x)}`;
           currentFMarkIds.push(safeId);
           if(!meshDict.fMarks[safeId]) {
               let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 2, to3Dz(mk.y)), bScene);
@@ -819,15 +816,15 @@
 
       let pCount = Object.keys(serverWorld.players).length;
       let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
-      document.getElementById('room-info').innerText = \`방: \${myRoom} | 현재 탐험가: \${pCount}명\`;
+      document.getElementById('room-info').innerText = `방: ${myRoom} | 현재 탐험가: ${pCount}명`;
       let bBar = document.getElementById('battery-bar');
       bBar.style.width = battery + '%'; bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
-      document.getElementById('fitem-info').innerText = \`형광물질 (X키: 붓칠): \${fCount}개\`;
+      document.getElementById('fitem-info').innerText = `형광물질 (X키: 붓칠): ${fCount}개`;
       
       let now = Date.now();
       if(!window.gameStartTime) window.gameStartTime = now;
       let tStr = ((now - window.gameStartTime)/1000).toFixed(1);
-      document.getElementById('time-info').innerText = \`⏱ 흐르는 시간: \${tStr}초\`;
+      document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${tStr}초`;
       
       drawMinimap();
       bScene.render();
