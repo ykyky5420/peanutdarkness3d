@@ -29,7 +29,6 @@
     .answer-container input { padding: 8px 20px; border-radius: 20px; border: none; background: #111; color: white; width: 150px; text-align: center; }
     .answer-container button { padding: 8px 20px; margin-top: 0; width: auto; font-size: 14px; border-radius: 20px; background: #d4a017; color: black; font-weight:bold; cursor:pointer; border:none;}
     
-    /* ✨ 복원된 개발자 UI 스타일 */
     #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
     
     #mobile-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
@@ -135,7 +134,7 @@
   <canvas id="colCanvas" style="display:none;"></canvas>
 
   <script>
-    const socket = io();
+    const socket = io({ transports: ['websocket', 'polling'] });
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
     
@@ -159,11 +158,9 @@
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
 
-    // ✨ 복원된 개발자 상태 변수
     let devModeActive = false;
     let fullVision = false;
 
-    // ✨ 복원된 서버 통신 로직 (문제 은행 동기화 및 관리)
     socket.on('wordBankUpdate', (words) => {
       let ul = document.getElementById('wordBankList');
       if(!ul) return;
@@ -336,7 +333,6 @@
         }
     }
 
-    // ✨ 복원된 단축키 감지 (Alt + A)
     window.addEventListener('keydown', (e) => {
       if (e.altKey && (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ')) {
         let pwd = prompt("창조주의 권능을 깨우기 위한 암호를 입력하세요:");
@@ -549,68 +545,71 @@
         ctx.drawImage(colCanvas, -drawSize/2, -drawSize/2, drawSize, drawSize);
         ctx.restore();
 
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = "rgba(0, 0, 0, 0.98)"; 
-        ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
+        // ✨ 창조주의 시선(fullVision)이 아닐 때만 칠흑 장막을 씌우고 구멍을 파냅니다.
+        if (!fullVision) {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = "rgba(0, 0, 0, 0.98)"; 
+            ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = "white";
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = "white";
 
-        if (lanternOn) {
-            ctx.beginPath();
-            ctx.moveTo(0, 0); 
-            let numRays = 40; 
-            let startA = playerDir - currentFov/2;
-            let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
-            
-            let hitPoints = []; 
+            if (lanternOn) {
+                ctx.beginPath();
+                ctx.moveTo(0, 0); 
+                let numRays = 40; 
+                let startA = playerDir - currentFov/2;
+                let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
+                
+                let hitPoints = []; 
 
-            for(let i=0; i<=numRays; i++){
-                let a = startA + (i/numRays)*currentFov;
-                let d = 0; let maxD = 900; let step = 20; 
-                let hit = false;
-                while(d < maxD){
-                    d += step;
-                    let tx = playerX + Math.cos(a)*d; let ty = playerY + Math.sin(a)*d;
-                    let rx = tx - MAP_CENTER; let ry = ty - MAP_CENTER;
-                    let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
-                    let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
-                    if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
-                        if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
-                            hit = true; break; 
+                for(let i=0; i<=numRays; i++){
+                    let a = startA + (i/numRays)*currentFov;
+                    let d = 0; let maxD = 900; let step = 20; 
+                    let hit = false;
+                    while(d < maxD){
+                        d += step;
+                        let tx = playerX + Math.cos(a)*d; let ty = playerY + Math.sin(a)*d;
+                        let rx = tx - MAP_CENTER; let ry = ty - MAP_CENTER;
+                        let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
+                        let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
+                        if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
+                            if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
+                                hit = true; break; 
+                            }
                         }
                     }
+                    ctx.lineTo(Math.cos(a)*d*scale, Math.sin(a)*d*scale);
+                    if(hit) hitPoints.push({d: d, a: a});
                 }
-                ctx.lineTo(Math.cos(a)*d*scale, Math.sin(a)*d*scale);
-                if(hit) hitPoints.push({d: d, a: a});
-            }
-            ctx.closePath(); ctx.fill();
+                ctx.closePath(); ctx.fill();
 
-            for(let hp of hitPoints) {
-                ctx.beginPath();
-                ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 150 * scale, 0, Math.PI*2);
-                ctx.fill();
-            }
-        }
-        
-        ctx.beginPath(); ctx.arc(0, 0, 55 * scale, 0, Math.PI*2); ctx.fill(); 
-
-        if(serverWorld.meteors) {
-            serverWorld.meteors.forEach(m => {
-                let age = serverWorld.serverTime - m.startTime; 
-                let mRad = mapVal(age, 0, m.duration, 500, 0) * scale;
-                if(mRad > 0) { 
-                    let mx = (m.x - playerX) * scale; let my = (m.y - playerY) * scale; 
-                    ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill(); 
+                for(let hp of hitPoints) {
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 150 * scale, 0, Math.PI*2);
+                    ctx.fill();
                 }
+            }
+            
+            ctx.beginPath(); ctx.arc(0, 0, 55 * scale, 0, Math.PI*2); ctx.fill(); 
+
+            if(serverWorld.meteors) {
+                serverWorld.meteors.forEach(m => {
+                    let age = serverWorld.serverTime - m.startTime; 
+                    let mRad = mapVal(age, 0, m.duration, 500, 0) * scale;
+                    if(mRad > 0) { 
+                        let mx = (m.x - playerX) * scale; let my = (m.y - playerY) * scale; 
+                        ctx.beginPath(); ctx.arc(mx, my, mRad, 0, Math.PI*2); ctx.fill(); 
+                    }
+                });
+            }
+            
+            let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
+            allFMarks.forEach(mk => {
+                let mx = (mk.x - playerX) * scale; let my = (mk.y - playerY) * scale; 
+                ctx.beginPath(); ctx.arc(mx, my, 400 * scale, 0, Math.PI*2); ctx.fill(); 
             });
         }
-        
-        let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
-        allFMarks.forEach(mk => {
-            let mx = (mk.x - playerX) * scale; let my = (mk.y - playerY) * scale; 
-            ctx.beginPath(); ctx.arc(mx, my, 400 * scale, 0, Math.PI*2); ctx.fill(); 
-        });
 
         ctx.globalCompositeOperation = 'source-over';
         stations2D.forEach(s => { 
@@ -680,7 +679,6 @@
       bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
       bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
       
-      // ✨ 창조주의 시선(개발자 모드) 적용 - 맵 전체 밝히기
       bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
       if(fullVision) {
           bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5);
