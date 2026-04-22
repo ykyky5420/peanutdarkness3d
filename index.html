@@ -29,8 +29,6 @@
     .answer-container input { padding: 8px 20px; border-radius: 20px; border: none; background: #111; color: white; width: 150px; text-align: center; }
     .answer-container button { padding: 8px 20px; margin-top: 0; width: auto; font-size: 14px; border-radius: 20px; background: #d4a017; color: black; font-weight:bold; cursor:pointer; border:none;}
     
-    #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
-    
     #mobile-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
     .action-btn { position: absolute; width: 65px; height: 65px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4); color: white; font-size: 22px; font-weight: bold; display: flex; justify-content: center; align-items: center; pointer-events: auto; touch-action: none; user-select: none; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
     .action-btn:active { background: rgba(255,255,255,0.6); color: black; }
@@ -63,6 +61,7 @@
     .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
+    /* 미니맵 원형 클리핑 */
     #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
   </style>
 </head>
@@ -82,17 +81,6 @@
       <div class="name-gen-box"><input type="text" id="pName"><button onclick="generateRandomName()">🔄</button></div>
     </div>
     <button class="btn-start" onclick="startGame()">어둠 속으로 뛰어들기</button>
-  </div>
-
-  <div id="dev-ui">
-    <h3>🛠 창조주의 시선</h3>
-    <button onclick="fullVision = !fullVision;" style="margin-bottom:10px; padding:8px; border-radius:5px; border:none; cursor:pointer;">맵 전체 밝히기 토글</button>
-    <h4 style="margin: 5px 0; color: #aaa;">📚 문제 은행</h4>
-    <ul id="wordBankList" style="list-style:none; padding:0; margin:0; max-height: 150px; overflow-y: auto; font-size:14px; width:100%;"></ul>
-    <div style="display:flex; gap:5px; margin-top:10px;">
-      <input type="text" id="devWordInput" placeholder="새 단어 추가" style="width: 120px; padding:8px; font-size:14px; border-radius:5px;">
-      <button onclick="addWordToBank()" style="margin:0; padding:8px; font-size:14px; width:auto; border-radius:5px; cursor:pointer;">추가</button>
-    </div>
   </div>
 
   <div id="info-ui">
@@ -134,13 +122,14 @@
   <canvas id="colCanvas" style="display:none;"></canvas>
 
   <script>
-    const socket = io({ transports: ['websocket', 'polling'] });
+    const socket = io();
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
     
     let gameState = 'LOBBY';
     let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
     
+    // ✨ 메모리 누수 방지가 적용된 로컬 형광물질 배열
     let localFMarks = [];
     
     const MAP_RADIUS = 4000; const MAP_CENTER = 4000; const MAP_SIZE = MAP_RADIUS * 2;
@@ -157,29 +146,6 @@
     let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
-
-    let devModeActive = false;
-    let fullVision = false;
-
-    socket.on('wordBankUpdate', (words) => {
-      let ul = document.getElementById('wordBankList');
-      if(!ul) return;
-      ul.innerHTML = "";
-      words.forEach(w => {
-        let li = document.createElement('li');
-        li.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px;";
-        li.innerHTML = `<span>${w}</span>
-                        <div>
-                          <button onclick="forceWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
-                          <button onclick="deleteWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
-                        </div>`;
-        ul.appendChild(li);
-      });
-    });
-
-    function addWordToBank() { let w = document.getElementById('devWordInput').value.trim(); if(w) socket.emit('addWord', w); document.getElementById('devWordInput').value = ""; }
-    function deleteWord(w) { socket.emit('deleteWord', w); }
-    function forceWord(w) { socket.emit('forceWord', w); }
 
     let lastStepDistance = 0;
     let stepToggle = 1;
@@ -234,7 +200,7 @@
 
     socket.on('gameEnd', (data) => {
         gameState = 'GAME_OVER';
-        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap', 'dev-ui'].forEach(id => document.getElementById(id).style.display = 'none');
+        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap'].forEach(id => document.getElementById(id).style.display = 'none');
         document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
         document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
         document.getElementById('game-over-ui').style.display = 'flex'; document.body.style.cursor = 'auto';
@@ -268,6 +234,9 @@
       canvas.focus(); document.body.style.cursor = 'none';
     }
 
+    // ==========================================
+    // 2D 충돌 엔진 (안전 장치 추가)
+    // ==========================================
     let collisionPixels;
     function initCollisionLayer(word) {
         let colCanvas = document.getElementById('colCanvas');
@@ -292,7 +261,6 @@
     }
 
     function isColliding(x, y) {
-      if (!collisionPixels) return false;
       const angles = [0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, Math.PI*5/4, Math.PI*1.5, Math.PI*7/4];
       for(let a of angles) {
           if(checkPixelCollision(x + Math.cos(a)*playerPhysicsRadius, y + Math.sin(a)*playerPhysicsRadius)) return true;
@@ -301,7 +269,6 @@
     }
 
     function resolveCollision(dx, dy) {
-      if (!collisionPixels) return;
       let nx = playerX + dx;
       if (!isColliding(nx, playerY)) playerX = nx;
       let ny = playerY + dy;
@@ -321,11 +288,15 @@
       }
     }
 
+    // ==========================================
+    // 조작 및 형광물질 안전 배치
+    // ==========================================
     function placeFluorescentMark() {
         let me = serverWorld.players[socket.id];
         if (me && me.fCount > 0) {
             socket.emit('useFluorescent', { x: playerX, y: playerY });
             localFMarks.push({ id: "local_" + Date.now(), x: playerX, y: playerY });
+            // ✨ 메모리 누수 방지: 흔적이 너무 많아지면 가장 오래된 흔적을 지웁니다.
             if (localFMarks.length > 20) localFMarks.shift(); 
             me.fCount--;
         } else {
@@ -334,21 +305,12 @@
     }
 
     window.addEventListener('keydown', (e) => {
-      if (e.altKey && (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ')) {
-        let pwd = prompt("창조주의 권능을 깨우기 위한 암호를 입력하세요:");
-        if (pwd === "cjdrP119!") {
-            devModeActive = !devModeActive;
-            document.getElementById('dev-ui').style.display = devModeActive ? 'flex' : 'none';
-        }
-        return;
-      }
       if (document.activeElement.tagName === 'INPUT') return;
       let k = e.key.toLowerCase();
       if (k === 'z' || k === 'ㅋ') { lanternOn = !lanternOn; }
       if (k === 'x' || k === 'ㅌ') { placeFluorescentMark(); }
       if (!e.repeat) activeKeys[k] = true;
     });
-
     window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; isMoving = false; });
 
@@ -398,6 +360,9 @@
       }
     }
 
+    // ==========================================
+    // 3D 엔진 (완벽하게 덜어낸 조명 과부하)
+    // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
     let stations3D = [];
@@ -407,15 +372,16 @@
 
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
+        
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
         scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
-        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.05, 1), currentFov, 2, scene);
+        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.1, 1), currentFov, 2, scene);
         bLantern.diffuse = new BABYLON.Color3(1, 1, 1); 
-        bLantern.intensity = 100;
+        bLantern.intensity = 50; 
         bLantern.range = 800; 
 
         shadowGenerator = new BABYLON.ShadowGenerator(1024, bLantern);
@@ -424,37 +390,36 @@
         shadowGenerator.setDarkness(0.0); 
         shadowGenerator.bias = 0.005; 
 
-        let atlas = new BABYLON.DynamicTexture("atlas", {width: 128, height: 64}, scene, false);
-        let aCtx = atlas.getContext();
-        aCtx.fillStyle = "#050508"; aCtx.fillRect(0,0,64,64);
-        aCtx.strokeStyle = "#11111a"; aCtx.lineWidth = 4; aCtx.strokeRect(0,0,64,64);
-        aCtx.fillStyle = "#ffffff"; aCtx.fillRect(64,0,64,64);
-        atlas.update();
+        const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_SIZE*0.1, height: MAP_SIZE*0.1}, scene);
+        let groundTex = new BABYLON.DynamicTexture("groundTex", {width: 512, height: 512}, scene, false);
+        let gCtx = groundTex.getContext();
+        gCtx.fillStyle = "#020203"; gCtx.fillRect(0,0,512,512);
+        gCtx.strokeStyle = "#ffffff"; gCtx.lineWidth = 2; 
+        for(let i=0; i<512; i+=32){ gCtx.beginPath(); gCtx.moveTo(i,0); gCtx.lineTo(i,512); gCtx.stroke(); gCtx.beginPath(); gCtx.moveTo(0,i); gCtx.lineTo(512,i); gCtx.stroke(); }
+        groundTex.update(); groundTex.uScale = MAP_SIZE * 0.1 / 10; groundTex.vScale = MAP_SIZE * 0.1 / 10;
+        
+        const gMat = new BABYLON.StandardMaterial("gMat", scene);
+        gMat.diffuseTexture = groundTex; 
+        gMat.specularColor = new BABYLON.Color3(0,0,0); 
+        gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
+        // ✨ 가장 안전한 타협점: 4개의 조명만 허용 (충돌 및 과부하 100% 방지)
+        gMat.maxSimultaneousLights = 4; 
+        ground.material = gMat;
+        ground.receiveShadows = true;
 
-        let faceUV = new Array(6);
-        for(let i=0; i<6; i++) {
-            if (i === 4) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); } 
-            else if (i === 5) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); }
-            else { faceUV[i] = new BABYLON.Vector4(0.5, 0, 1.0, 1); } 
-        }
+        const border = BABYLON.MeshBuilder.CreateTorus("border", {diameter: MAP_SIZE*0.1, thickness: 2, tessellation: 64}, scene);
+        const bMat = new BABYLON.StandardMaterial("bMat", scene);
+        bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5; border.material = bMat; border.position.y = 1;
 
-        truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5.05, height: 15, depth: 5.05, faceUV: faceUV}, scene);
+        truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5, height: 15, depth: 5}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.diffuseTexture = atlas;
-        tMat.specularColor = new BABYLON.Color3(0, 0, 0); 
+        tMat.diffuseColor = new BABYLON.Color3(1, 1, 1); 
         tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
+        tMat.specularColor = new BABYLON.Color3(0, 0, 0); 
         tMat.maxSimultaneousLights = 4; 
         truthBaseBox.material = tMat;
         truthBaseBox.receiveShadows = true; 
         shadowGenerator.addShadowCaster(truthBaseBox, true); 
-
-        const bottomGround = BABYLON.MeshBuilder.CreateCylinder("bg", {diameter: 800, height: 0.1}, scene);
-        bottomGround.position.y = -15;
-        let bgMat = new BABYLON.StandardMaterial("bgm", scene);
-        bgMat.diffuseColor = new BABYLON.Color3(0.01, 0.01, 0.02);
-        bgMat.maxSimultaneousLights = 4;
-        bottomGround.material = bgMat;
-        bottomGround.receiveShadows = true;
 
         bPlayer = BABYLON.MeshBuilder.CreateSphere("myPlayer", {diameter: 3}, scene);
         let pMat = new BABYLON.StandardMaterial("pMat", scene);
@@ -501,14 +466,11 @@
 
         for(let cy=0; cy<mapScale; cy+=5){ 
             for(let cx=0; cx<mapScale; cx+=5){
-                let rx = cx - 400; let ry = cy - 400;
-                if (rx*rx + ry*ry > 400*400) continue; 
-
                 let idx = (cy * mapScale + cx) * 4;
-                if(collisionPixels[idx + 3] <= 128) { 
-                    let x3D = rx * 0.1; 
-                    let z3D = -ry * 0.1; 
-                    let m = BABYLON.Matrix.Translation(x3D, -7.5, z3D); 
+                if(collisionPixels[idx + 3] > 128) { 
+                    let x3D = (cx - 400); 
+                    let z3D = -(cy - 400); 
+                    let m = BABYLON.Matrix.Translation(x3D, 7.5, z3D); 
                     for(let i=0; i<16; i++) matrices.push(m.m[i]);
                 }
             }
@@ -517,8 +479,12 @@
         truthBaseBox.rotation.y = serverWorld.angle;
     }
 
+    // ==========================================
+    // ✨ 불필요한 두께 연산을 버리고 가장 가볍고 순수하게 뚫어낸 미니맵
+    // ==========================================
     function drawMinimap() {
-        if (!collisionPixels) return; 
+        // ✨ 데이터가 완벽히 로드되기 전에는 절대 그려서 엔진을 멈추게 하지 않습니다.
+        if (!collisionPixels) return;
 
         let mm = document.getElementById('minimap');
         let ctx = mm.getContext('2d');
@@ -552,19 +518,18 @@
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = "white";
 
+        // 랜턴 시야 천공 (두께 억지 연산 삭제 -> 엔진 과부하 해결)
         if (lanternOn) {
             ctx.beginPath();
             ctx.moveTo(0, 0); 
+            // 연산을 극도로 다이어트 시켜 멈춤을 완벽 방지
             let numRays = 40; 
             let startA = playerDir - currentFov/2;
             let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
             
-            let hitPoints = []; 
-
             for(let i=0; i<=numRays; i++){
                 let a = startA + (i/numRays)*currentFov;
                 let d = 0; let maxD = 900; let step = 20; 
-                let hit = false;
                 while(d < maxD){
                     d += step;
                     let tx = playerX + Math.cos(a)*d; let ty = playerY + Math.sin(a)*d;
@@ -572,21 +537,15 @@
                     let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
                     let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
                     if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
+                        // 오직 벽의 표면까지만 비추고 즉시 연산을 정지합니다.
                         if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
-                            hit = true; break; 
+                            break; 
                         }
                     }
                 }
                 ctx.lineTo(Math.cos(a)*d*scale, Math.sin(a)*d*scale);
-                if(hit) hitPoints.push({d: d, a: a});
             }
             ctx.closePath(); ctx.fill();
-
-            for(let hp of hitPoints) {
-                ctx.beginPath();
-                ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 150 * scale, 0, Math.PI*2);
-                ctx.fill();
-            }
         }
         
         ctx.beginPath(); ctx.arc(0, 0, 55 * scale, 0, Math.PI*2); ctx.fill(); 
@@ -623,6 +582,9 @@
         ctx.restore();
     }
 
+    // ==========================================
+    // 메인 시간의 흐름 (Render Loop)
+    // ==========================================
     engine.runRenderLoop(() => {
       if (gameState !== 'PLAY') { bScene.render(); return; }
 
@@ -671,19 +633,13 @@
       let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
       bPlayer.position.x = px3; bPlayer.position.z = pz3;
       bCamera.position.x = px3; bCamera.position.z = pz3;
-
+      
       let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
       bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
-      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
-      
-      bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
-      if(fullVision) {
-          bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-      } else {
-          bScene.ambientColor = new BABYLON.Color3(0, 0, 0);
-      }
-      
+      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.1, -Math.sin(playerDir));
+      bLantern.intensity = lanternOn ? 50 * flicker : 0;
       bLantern.angle = currentFov; 
+      
       truthBaseBox.rotation.y = serverWorld.angle;
 
       let currentItemIds = [];
@@ -733,9 +689,11 @@
           let safeId = mk.id !== undefined ? mk.id.toString() : `fm_local_${idx}_${Math.floor(mk.x)}`;
           currentFMarkIds.push(safeId);
           if(!meshDict.fMarks[safeId]) {
+              // 엔진을 죽이지 않는 가벼운 광원
               let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 2, to3Dz(mk.y)), bScene);
               fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; fml.range = 60;
               
+              // 장판을 지우고 가벼운 보석 결정체만 남김
               let fm = BABYLON.MeshBuilder.CreatePolyhedron("fmm_"+safeId, {sizeX: 1, sizeY: 2, sizeZ: 1}, bScene);
               fm.position = new BABYLON.Vector3(to3Dx(mk.x), 1, to3Dz(mk.y));
               let fmat = new BABYLON.StandardMaterial("fmmat_"+safeId, bScene);
@@ -767,7 +725,7 @@
         let opx3 = to3Dx(p.x); let opz3 = to3Dz(p.y);
         meshDict.players[id].mesh.position.x = opx3; meshDict.players[id].mesh.position.z = opz3;
         meshDict.players[id].light.position = new BABYLON.Vector3(opx3, 4, opz3);
-        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.05, -Math.sin(p.dir));
+        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.1, -Math.sin(p.dir));
         meshDict.players[id].light.intensity = p.lantern ? 20 : 0;
       }
       for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
@@ -819,13 +777,10 @@
       document.getElementById('room-info').innerText = `방: ${myRoom} | 현재 탐험가: ${pCount}명`;
       let bBar = document.getElementById('battery-bar');
       bBar.style.width = battery + '%'; bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
+      document.getElementById('lantern-info').innerText = lanternOn ? "랜턴 켜짐 (Z키: 끄기)" : "랜턴 꺼짐 (Z키: 켜기)";
       document.getElementById('fitem-info').innerText = `형광물질 (X키: 붓칠): ${fCount}개`;
-      
-      let now = Date.now();
-      if(!window.gameStartTime) window.gameStartTime = now;
-      let tStr = ((now - window.gameStartTime)/1000).toFixed(1);
-      document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${tStr}초`;
-      
+      document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${((serverWorld.serverTime - (serverWorld.gameStartTime || serverWorld.serverTime))/1000).toFixed(1)}초`;
+
       drawMinimap();
       bScene.render();
     });
