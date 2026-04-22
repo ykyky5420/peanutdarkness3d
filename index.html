@@ -134,9 +134,11 @@
   <canvas id="colCanvas" style="display:none;"></canvas>
 
   <script>
-    const socket = io();
+    // 현재 접속한 도메인 주소(Render에서 제공한 주소)를 명시적으로 찾아서 꽂아줍니다.
+    const socket = io(window.location.origin, {
+        transports: ['websocket', 'polling'] // WebSocket을 최우선으로 강제합니다.
+    });
     const canvas = document.getElementById("renderCanvas");
-    const engine = new BABYLON.Engine(canvas, true);
     
     let gameState = 'LOBBY';
     let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
