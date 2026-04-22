@@ -62,6 +62,7 @@
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
     #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+  #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
   </style>
 </head>
 <body>
@@ -90,6 +91,17 @@
     <div id="time-info" style="color: #ffcc00;">⏱ 흐르는 시간: 0.0초</div>
   </div>
   <div id="sys-msg-container"></div>
+
+  <div id="dev-ui">
+    <h3>🛠 창조주의 시선</h3>
+    <button onclick="fullVision = !fullVision;" style="margin-bottom:10px; padding:8px; border-radius:5px; border:none; cursor:pointer;">맵 전체 밝히기 토글</button>
+    <h4 style="margin: 5px 0; color: #aaa;">📚 문제 은행</h4>
+    <ul id="wordBankList" style="list-style:none; padding:0; margin:0; max-height: 150px; overflow-y: auto; font-size:14px; width:100%;"></ul>
+    <div style="display:flex; gap:5px; margin-top:10px;">
+      <input type="text" id="devWordInput" placeholder="새 단어 추가" style="width: 120px; padding:8px; font-size:14px; border-radius:5px;">
+      <button onclick="addWordToBank()" style="margin:0; padding:8px; font-size:14px; width:auto; border-radius:5px; cursor:pointer;">추가</button>
+    </div>
+  </div>
 
   <div id="mobile-ui">
     <div class="fs-btn" onclick="toggleFullScreen()">⛶</div>
@@ -145,6 +157,28 @@
     let lanternOn = true; let battery = 100; const batteryDrain = 0.04;
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
+
+    
+    let devModeActive = false;
+    let fullVision = false;
+    socket.on('wordBankUpdate', (words) => {
+      let ul = document.getElementById('wordBankList');
+      if(!ul) return;
+      ul.innerHTML = "";
+      words.forEach(w => {
+        let li = document.createElement('li');
+        li.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px;";
+        li.innerHTML = `<span>${w}</span> 
+                        <div>
+                          <button onclick="forceWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
+                          <button onclick="deleteWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
+                        </div>`;
+        ul.appendChild(li);
+      });
+    });
+    function addWordToBank() { let w = document.getElementById('devWordInput').value.trim(); if(w) socket.emit('addWord', w); document.getElementById('devWordInput').value = ""; }
+    function deleteWord(w) { socket.emit('deleteWord', w); }
+    function forceWord(w) { socket.emit('forceWord', w); }
 
     let lastStepDistance = 0;
     let stepToggle = 1;
@@ -306,13 +340,23 @@
         }
     }
 
+    
     window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ')) {
+        let pwd = prompt("창조주의 권능을 깨우기 위한 암호를 입력하세요:");
+        if (pwd === "cjdrP119!") {
+            devModeActive = !devModeActive;
+            document.getElementById('dev-ui').style.display = devModeActive ? 'flex' : 'none';
+        }
+        return;
+      }
       if (document.activeElement.tagName === 'INPUT') return;
       let k = e.key.toLowerCase();
       if (k === 'z' || k === 'ㅋ') { lanternOn = !lanternOn; }
       if (k === 'x' || k === 'ㅌ') { placeFluorescentMark(); }
       if (!e.repeat) activeKeys[k] = true;
     });
+    
     window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; isMoving = false; });
 
@@ -379,6 +423,7 @@
 
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
+
 
         bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.05, 1), currentFov, 2, scene);
         bLantern.diffuse = new BABYLON.Color3(1, 1, 1); 
@@ -653,14 +698,17 @@
           st.halo.position.y = 15 + Math.sin(timeOffset + i) * 2;
       });
 
+      
       let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
       bPlayer.position.x = px3; bPlayer.position.z = pz3;
       bCamera.position.x = px3; bCamera.position.z = pz3;
+
       
       let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
       bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
       bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
-      bLantern.intensity = lanternOn ? 60 * flicker : 0;
+      bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
+      if(fullVision) bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5); else bScene.ambientColor = new BABYLON.Color3(0, 0, 0);
       bLantern.angle = currentFov; 
       
       truthBaseBox.rotation.y = serverWorld.angle;
