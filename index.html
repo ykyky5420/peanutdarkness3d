@@ -29,6 +29,8 @@
     .answer-container input { padding: 8px 20px; border-radius: 20px; border: none; background: #111; color: white; width: 150px; text-align: center; }
     .answer-container button { padding: 8px 20px; margin-top: 0; width: auto; font-size: 14px; border-radius: 20px; background: #d4a017; color: black; font-weight:bold; cursor:pointer; border:none;}
     
+    #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
+    
     #mobile-ui { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
     .action-btn { position: absolute; width: 65px; height: 65px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4); color: white; font-size: 22px; font-weight: bold; display: flex; justify-content: center; align-items: center; pointer-events: auto; touch-action: none; user-select: none; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
     .action-btn:active { background: rgba(255,255,255,0.6); color: black; }
@@ -62,7 +64,6 @@
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
     #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
-  #dev-ui { position: absolute; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); border: 1px solid #d4a017; padding: 20px; border-radius: 12px; color: white; display: none; flex-direction: column; gap: 15px; z-index: 100; }
   </style>
 </head>
 <body>
@@ -83,15 +84,6 @@
     <button class="btn-start" onclick="startGame()">어둠 속으로 뛰어들기</button>
   </div>
 
-  <div id="info-ui">
-    <div id="room-info">방: ---- | 현재 탐험가: 1명</div>
-    <div class="battery-bar-container"><div id="battery-bar"></div></div>
-    <div id="lantern-info">랜턴 배터리 (Z키: 끄기)</div>
-    <div id="fitem-info" style="color: #00ffff;">형광물질 (X키: 붓칠): 0개</div>
-    <div id="time-info" style="color: #ffcc00;">⏱ 흐르는 시간: 0.0초</div>
-  </div>
-  <div id="sys-msg-container"></div>
-
   <div id="dev-ui">
     <h3>🛠 창조주의 시선</h3>
     <button onclick="fullVision = !fullVision;" style="margin-bottom:10px; padding:8px; border-radius:5px; border:none; cursor:pointer;">맵 전체 밝히기 토글</button>
@@ -102,6 +94,15 @@
       <button onclick="addWordToBank()" style="margin:0; padding:8px; font-size:14px; width:auto; border-radius:5px; cursor:pointer;">추가</button>
     </div>
   </div>
+
+  <div id="info-ui">
+    <div id="room-info">방: ---- | 현재 탐험가: 1명</div>
+    <div class="battery-bar-container"><div id="battery-bar"></div></div>
+    <div id="lantern-info">랜턴 배터리 (Z키: 끄기)</div>
+    <div id="fitem-info" style="color: #00ffff;">형광물질 (X키: 붓칠): 0개</div>
+    <div id="time-info" style="color: #ffcc00;">⏱ 흐르는 시간: 0.0초</div>
+  </div>
+  <div id="sys-msg-container"></div>
 
   <div id="mobile-ui">
     <div class="fs-btn" onclick="toggleFullScreen()">⛶</div>
@@ -140,7 +141,6 @@
     let gameState = 'LOBBY';
     let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
     
-    // 메모리 누수 방지 처리된 클라이언트 형광물질 배열
     let localFMarks = [];
     
     const MAP_RADIUS = 4000; const MAP_CENTER = 4000; const MAP_SIZE = MAP_RADIUS * 2;
@@ -158,9 +158,9 @@
     let activeKeys = {}; let joyDx = 0; let joyDy = 0;
     let isMoving = false;
 
-    
     let devModeActive = false;
     let fullVision = false;
+
     socket.on('wordBankUpdate', (words) => {
       let ul = document.getElementById('wordBankList');
       if(!ul) return;
@@ -168,14 +168,15 @@
       words.forEach(w => {
         let li = document.createElement('li');
         li.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px;";
-        li.innerHTML = `<span>${w}</span> 
+        li.innerHTML = \`<span>\${w}</span>
                         <div>
-                          <button onclick="forceWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
-                          <button onclick="deleteWord('${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
-                        </div>`;
+                          <button onclick="forceWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#4CAF50; color:white; border-radius:3px; border:none; cursor:pointer;">출제</button>
+                          <button onclick="deleteWord('\${w}')" style="padding:2px 5px; font-size:12px; margin:0; width:auto; background:#f44336; color:white; border-radius:3px; border:none; cursor:pointer;">삭제</button>
+                        </div>\`;
         ul.appendChild(li);
       });
     });
+
     function addWordToBank() { let w = document.getElementById('devWordInput').value.trim(); if(w) socket.emit('addWord', w); document.getElementById('devWordInput').value = ""; }
     function deleteWord(w) { socket.emit('deleteWord', w); }
     function forceWord(w) { socket.emit('forceWord', w); }
@@ -199,7 +200,7 @@
     const adjectives = ["활동적인", "조용한", "용감한", "소심한", "빛나는", "어두운", "지혜로운", "신비로운", "푸른", "붉은"];
     const nouns = ["달팽이", "올빼미", "고양이", "늑대", "여우", "까마귀", "그림자", "별빛", "바람", "탐험가"];
     function generateRandomRoomCode() { document.getElementById('roomCode').value = Math.floor(Math.random() * 9000 + 1000).toString(); }
-    function generateRandomName() { document.getElementById('pName').value = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`; }
+    function generateRandomName() { document.getElementById('pName').value = \`\${adjectives[Math.floor(Math.random() * adjectives.length)]} \${nouns[Math.floor(Math.random() * nouns.length)]}\`; }
     window.onload = () => { generateRandomName(); generateRandomRoomCode(); };
 
     function showSysMsg(text) {
@@ -220,7 +221,7 @@
     socket.on('receiveChat', (data) => {
       let msgBox = document.getElementById('chat-messages');
       let msgDiv = document.createElement('div'); msgDiv.className = 'chat-msg';
-      msgDiv.innerHTML = `<span class="chat-sender" style="color:${data.color}">${data.sender}:</span><span>${data.text}</span>`;
+      msgDiv.innerHTML = \`<span class="chat-sender" style="color:\${data.color}">\${data.sender}:</span><span>\${data.text}</span>\`;
       msgBox.appendChild(msgDiv); msgBox.scrollTop = msgBox.scrollHeight;
     });
 
@@ -233,9 +234,9 @@
 
     socket.on('gameEnd', (data) => {
         gameState = 'GAME_OVER';
-        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap'].forEach(id => document.getElementById(id).style.display = 'none');
-        document.getElementById('go-text').innerHTML = `누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ ${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">${data.winner}</b><br>소요 시간: ${data.time}초`;
-        document.getElementById('go-record').innerHTML = data.isNewRecord ? `✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨` : `🏆 최고 기록: ${data.bestRecord.name} (${data.bestRecord.time}초)`;
+        ['mobile-ui','chat-ui','answer-ui','info-ui','minimap', 'dev-ui'].forEach(id => document.getElementById(id).style.display = 'none');
+        document.getElementById('go-text').innerHTML = \`누군가 깊은 심연 속에서 마침내 답을 찾아냈습니다.<br><br><span style="color:#d4a017; font-size:36px; font-weight:bold; letter-spacing: 3px;">[ \${data.word} ]</span><br><br>빛을 밝힌 탐험가: <b style="color:#fff;">\${data.winner}</b><br>소요 시간: \${data.time}초\`;
+        document.getElementById('go-record').innerHTML = data.isNewRecord ? \`✨ 눈부신 통찰입니다! 새로운 신기록이 쓰였습니다! ✨\` : \`🏆 최고 기록: \${data.bestRecord.name} (\${data.bestRecord.time}초)\`;
         document.getElementById('game-over-ui').style.display = 'flex'; document.body.style.cursor = 'auto';
     });
 
@@ -267,9 +268,6 @@
       canvas.focus(); document.body.style.cursor = 'none';
     }
 
-    // ==========================================
-    // 2D 충돌 엔진 (글자는 투명한 홈, 배경은 솔리드한 대지)
-    // ==========================================
     let collisionPixels;
     function initCollisionLayer(word) {
         let colCanvas = document.getElementById('colCanvas');
@@ -278,7 +276,7 @@
         ctx.clearRect(0, 0, colCanvas.width, colCanvas.height);
         ctx.fillStyle = "white"; 
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = `bold ${3500 * COLLISION_SCALE}px sans-serif`;
+        ctx.font = \`bold \${3500 * COLLISION_SCALE}px sans-serif\`;
         ctx.fillText(word, colCanvas.width / 2, colCanvas.height / 2);
         collisionPixels = ctx.getImageData(0, 0, colCanvas.width, colCanvas.height).data;
     }
@@ -290,8 +288,6 @@
       let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
       let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
       if (cx < 0 || cx >= Math.floor(MAP_SIZE*COLLISION_SCALE) || cy < 0 || cy >= Math.floor(MAP_SIZE*COLLISION_SCALE)) return false;
-      
-      // ✨ 글자(Alpha > 128)는 낭떠러지(홈)이므로, 충돌(Collision = true)로 처리하여 플레이어가 떨어지지 못하게 막습니다.
       return collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128; 
     }
 
@@ -325,9 +321,6 @@
       }
     }
 
-    // ==========================================
-    // 조작 및 형광물질
-    // ==========================================
     function placeFluorescentMark() {
         let me = serverWorld.players[socket.id];
         if (me && me.fCount > 0) {
@@ -340,7 +333,6 @@
         }
     }
 
-    
     window.addEventListener('keydown', (e) => {
       if (e.altKey && (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ')) {
         let pwd = prompt("창조주의 권능을 깨우기 위한 암호를 입력하세요:");
@@ -356,7 +348,7 @@
       if (k === 'x' || k === 'ㅌ') { placeFluorescentMark(); }
       if (!e.repeat) activeKeys[k] = true;
     });
-    
+
     window.addEventListener('keyup', (e) => { if (document.activeElement.tagName !== 'INPUT') activeKeys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { activeKeys = {}; joyDx = 0; joyDy = 0; isMoving = false; });
 
@@ -367,11 +359,11 @@
         let dx = touch.clientX - (rect.left + rect.width / 2); let dy = touch.clientY - (rect.top + rect.height / 2);
         let distance = Math.hypot(dx, dy); let maxDist = 60; 
         if (distance > maxDist) { dx = (dx / distance) * maxDist; dy = (dy / distance) * maxDist; }
-        joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        joyKnob.style.transform = \`translate(calc(-50% + \${dx}px), calc(-50% + \${dy}px))\`;
         joyDx = dx / maxDist; joyDy = dy / maxDist;
     }
     function stopJoystick(e) {
-        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = `translate(-50%, -50%)`; break; } } }
+        if (joyActive) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) { joyActive = false; joyTouchId = null; joyDx = 0; joyDy = 0; joyKnob.style.transform = \`translate(-50%, -50%)\`; break; } } }
     }
     joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); if (!joyActive) { let t = e.changedTouches[0]; joyActive = true; joyTouchId = t.identifier; updateJoystick(t); }}, {passive: false});
     joyZone.addEventListener('touchmove', (e) => { e.preventDefault(); if (joyActive) { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }}}, {passive: false});
@@ -406,9 +398,6 @@
       }
     }
 
-    // ==========================================
-    // 3D 엔진 (음각 렌더링 - 홈이 파인 대지)
-    // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
     let stations3D = [];
@@ -421,13 +410,13 @@
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); 
         scene.ambientColor = new BABYLON.Color3(0, 0, 0); 
 
+        // Top-Down Camera Maintenance
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
-
         bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.05, 1), currentFov, 2, scene);
         bLantern.diffuse = new BABYLON.Color3(1, 1, 1); 
-        bLantern.intensity = 60; // 벼랑 밑을 선명하게 비추기 위해 강도 상승
+        bLantern.intensity = 100;
         bLantern.range = 800; 
 
         shadowGenerator = new BABYLON.ShadowGenerator(1024, bLantern);
@@ -436,35 +425,30 @@
         shadowGenerator.setDarkness(0.0); 
         shadowGenerator.bias = 0.005; 
 
-        // ✨ 텍스처 아틀라스: 왼쪽은 어두운 윗면(대지), 오른쪽은 순백색 측면(홈의 벽)
         let atlas = new BABYLON.DynamicTexture("atlas", {width: 128, height: 64}, scene, false);
         let aCtx = atlas.getContext();
-        // 윗면 (어두운 회색 + 미세한 그리드)
         aCtx.fillStyle = "#050508"; aCtx.fillRect(0,0,64,64);
         aCtx.strokeStyle = "#11111a"; aCtx.lineWidth = 4; aCtx.strokeRect(0,0,64,64);
-        // 측면 (순백색)
         aCtx.fillStyle = "#ffffff"; aCtx.fillRect(64,0,64,64);
         atlas.update();
 
         let faceUV = new Array(6);
         for(let i=0; i<6; i++) {
-            if (i === 4) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); } // Top Face (Dark)
-            else if (i === 5) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); } // Bottom Face
-            else { faceUV[i] = new BABYLON.Vector4(0.5, 0, 1.0, 1); } // Side Faces (White)
+            if (i === 4) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); } 
+            else if (i === 5) { faceUV[i] = new BABYLON.Vector4(0, 0, 0.5, 1); }
+            else { faceUV[i] = new BABYLON.Vector4(0.5, 0, 1.0, 1); } 
         }
 
-        // ✨ 대지 블록 생성 (이 블록들이 모여 홈이 파인 대지를 만듭니다)
         truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5.05, height: 15, depth: 5.05, faceUV: faceUV}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
         tMat.diffuseTexture = atlas;
         tMat.specularColor = new BABYLON.Color3(0, 0, 0); 
         tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
-        tMat.maxSimultaneousLights = 4; // 과부하 방지
+        tMat.maxSimultaneousLights = 4; 
         truthBaseBox.material = tMat;
         truthBaseBox.receiveShadows = true; 
         shadowGenerator.addShadowCaster(truthBaseBox, true); 
 
-        // 홈의 바닥면 (칠흑)
         const bottomGround = BABYLON.MeshBuilder.CreateCylinder("bg", {diameter: 800, height: 0.1}, scene);
         bottomGround.position.y = -15;
         let bgMat = new BABYLON.StandardMaterial("bgm", scene);
@@ -516,17 +500,15 @@
         let matrices = [];
         let mapScale = MAP_SIZE * COLLISION_SCALE; 
 
-        // ✨ 글자가 아닌 곳(Alpha <= 128)에만 블록을 세워 거대한 대지를 만듭니다. (글자는 텅 빈 홈이 됩니다)
         for(let cy=0; cy<mapScale; cy+=5){ 
             for(let cx=0; cx<mapScale; cx+=5){
                 let rx = cx - 400; let ry = cy - 400;
-                if (rx*rx + ry*ry > 400*400) continue; // 원형 맵 밖은 절단
+                if (rx*rx + ry*ry > 400*400) continue; 
 
                 let idx = (cy * mapScale + cx) * 4;
                 if(collisionPixels[idx + 3] <= 128) { 
                     let x3D = rx * 0.1; 
                     let z3D = -ry * 0.1; 
-                    // 깊이 15의 블록을 Y=-7.5에 위치시키면, 윗면은 Y=0, 아랫면은 Y=-15가 됩니다.
                     let m = BABYLON.Matrix.Translation(x3D, -7.5, z3D); 
                     for(let i=0; i<16; i++) matrices.push(m.m[i]);
                 }
@@ -536,9 +518,6 @@
         truthBaseBox.rotation.y = serverWorld.angle;
     }
 
-    // ==========================================
-    // ✨ 미니맵 완벽 동기화 (탁본 스탬프 효과)
-    // ==========================================
     function drawMinimap() {
         if (!collisionPixels) return; 
 
@@ -558,7 +537,6 @@
         ctx.fillStyle = "#1a1a24"; 
         ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
 
-        // 글자를 미니맵 맨 밑에 깔아둡니다
         ctx.save();
         let dx = (MAP_CENTER - playerX) * scale; 
         let dy = (MAP_CENTER - playerY) * scale;
@@ -568,7 +546,6 @@
         ctx.drawImage(colCanvas, -drawSize/2, -drawSize/2, drawSize, drawSize);
         ctx.restore();
 
-        // 칠흑의 장막으로 덮기
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = "rgba(0, 0, 0, 0.98)"; 
         ctx.fillRect(-mmSize, -mmSize, mmSize*2, mmSize*2);
@@ -576,7 +553,6 @@
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = "white";
 
-        // ✨ 랜턴 시야: 빛이 홈의 세로벽에 닿으면 거대한 탁본 도장(Stamp)을 찍어 윤곽을 시원하게 밝힙니다.
         if (lanternOn) {
             ctx.beginPath();
             ctx.moveTo(0, 0); 
@@ -584,7 +560,7 @@
             let startA = playerDir - currentFov/2;
             let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
             
-            let hitPoints = []; // 빛이 튕긴 지점 보관
+            let hitPoints = []; 
 
             for(let i=0; i<=numRays; i++){
                 let a = startA + (i/numRays)*currentFov;
@@ -597,7 +573,6 @@
                     let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
                     let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
                     if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
-                        // 빛이 홈(빈 공간) 안으로 들어가 반대편 세로벽을 때림
                         if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
                             hit = true; break; 
                         }
@@ -608,7 +583,6 @@
             }
             ctx.closePath(); ctx.fill();
 
-            // ✨ 빛이 닿은 벽면에 반지름 150 규모의 스탬프를 쾅 찍어 글자의 몸통을 한 번에 밝혀냅니다! (엔진 멈춤 원천 차단)
             for(let hp of hitPoints) {
                 ctx.beginPath();
                 ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 150 * scale, 0, Math.PI*2);
@@ -650,9 +624,6 @@
         ctx.restore();
     }
 
-    // ==========================================
-    // 메인 시간의 흐름 (Render Loop)
-    // ==========================================
     engine.runRenderLoop(() => {
       if (gameState !== 'PLAY') { bScene.render(); return; }
 
@@ -698,19 +669,22 @@
           st.halo.position.y = 15 + Math.sin(timeOffset + i) * 2;
       });
 
-      
       let px3 = to3Dx(playerX); let pz3 = to3Dz(playerY);
       bPlayer.position.x = px3; bPlayer.position.z = pz3;
       bCamera.position.x = px3; bCamera.position.z = pz3;
 
-      
       let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
       bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
       bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
-      bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
-      if(fullVision) bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5); else bScene.ambientColor = new BABYLON.Color3(0, 0, 0);
-      bLantern.angle = currentFov; 
       
+      bLantern.intensity = (fullVision ? 0 : (lanternOn ? 100 * flicker : 0));
+      if(fullVision) {
+          bScene.ambientColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+      } else {
+          bScene.ambientColor = new BABYLON.Color3(0, 0, 0);
+      }
+      
+      bLantern.angle = currentFov; 
       truthBaseBox.rotation.y = serverWorld.angle;
 
       let currentItemIds = [];
@@ -738,7 +712,7 @@
       let currentFItemIds = [];
       if(serverWorld.fItems) {
           serverWorld.fItems.forEach((fi, idx) => {
-              let safeId = fi.id !== undefined ? fi.id.toString() : `fit_${idx}_${Math.floor(fi.x)}`;
+              let safeId = fi.id !== undefined ? fi.id.toString() : \`fit_\${idx}_\${Math.floor(fi.x)}\`;
               currentFItemIds.push(safeId);
               if(dist(playerX, playerY, fi.x, fi.y) < 50) { socket.emit('collectFItem', fi.id); }
               
@@ -757,7 +731,7 @@
       let currentFMarkIds = [];
       let allFMarks = (serverWorld.fMarks || []).concat(localFMarks);
       allFMarks.forEach((mk, idx) => {
-          let safeId = mk.id !== undefined ? mk.id.toString() : `fm_local_${idx}_${Math.floor(mk.x)}`;
+          let safeId = mk.id !== undefined ? mk.id.toString() : \`fm_local_\${idx}_\${Math.floor(mk.x)}\`;
           currentFMarkIds.push(safeId);
           if(!meshDict.fMarks[safeId]) {
               let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 2, to3Dz(mk.y)), bScene);
@@ -843,13 +817,16 @@
 
       let pCount = Object.keys(serverWorld.players).length;
       let me = serverWorld.players[socket.id]; let fCount = me ? (me.fCount || 0) : 0;
-      document.getElementById('room-info').innerText = `방: ${myRoom} | 현재 탐험가: ${pCount}명`;
+      document.getElementById('room-info').innerText = \`방: \${myRoom} | 현재 탐험가: \${pCount}명\`;
       let bBar = document.getElementById('battery-bar');
       bBar.style.width = battery + '%'; bBar.style.backgroundColor = battery > 50 ? '#00ff64' : (battery > 20 ? '#ffcc00' : '#ff3333');
-      document.getElementById('lantern-info').innerText = lanternOn ? "랜턴 켜짐 (Z키: 끄기)" : "랜턴 꺼짐 (Z키: 켜기)";
-      document.getElementById('fitem-info').innerText = `형광물질 (X키: 붓칠): ${fCount}개`;
-      document.getElementById('time-info').innerText = `⏱ 흐르는 시간: ${((serverWorld.serverTime - (serverWorld.gameStartTime || serverWorld.serverTime))/1000).toFixed(1)}초`;
-
+      document.getElementById('fitem-info').innerText = \`형광물질 (X키: 붓칠): \${fCount}개\`;
+      
+      let now = Date.now();
+      if(!window.gameStartTime) window.gameStartTime = now;
+      let tStr = ((now - window.gameStartTime)/1000).toFixed(1);
+      document.getElementById('time-info').innerText = \`⏱ 흐르는 시간: \${tStr}초\`;
+      
       drawMinimap();
       bScene.render();
     });
