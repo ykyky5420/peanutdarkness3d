@@ -61,7 +61,6 @@
     .sys-msg { font-size: 18px; color: #ffcc96; text-shadow: 0 0 5px black; animation: fadeUp 3s forwards; }
     @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
-    /* 미니맵 원형 클리핑 */
     #minimap { position: absolute; top: 20px; right: 20px; width: 220px; height: 220px; border: 3px solid #d4a017; border-radius: 50%; z-index: 35; display: none; pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
   </style>
 </head>
@@ -129,7 +128,7 @@
     let gameState = 'LOBBY';
     let serverWorld = { angle: 0, targetWord: "", players: {}, items: [], enemies: [], meteors: [], fItems: [], fMarks: [], serverTime: Date.now() };
     
-    // 메모리 누수 방지가 적용된 로컬 형광물질 배열
+    // 메모리 누수 방지 처리된 로컬 형광물질 배열
     let localFMarks = [];
     
     const MAP_RADIUS = 4000; const MAP_CENTER = 4000; const MAP_SIZE = MAP_RADIUS * 2;
@@ -235,7 +234,7 @@
     }
 
     // ==========================================
-    // 2D 충돌 엔진
+    // 2D 충돌 엔진 (안전 가드 추가)
     // ==========================================
     let collisionPixels;
     function initCollisionLayer(word) {
@@ -261,6 +260,7 @@
     }
 
     function isColliding(x, y) {
+      if (!collisionPixels) return false; // 안전 가드
       const angles = [0, Math.PI/4, Math.PI/2, Math.PI*3/4, Math.PI, Math.PI*5/4, Math.PI*1.5, Math.PI*7/4];
       for(let a of angles) {
           if(checkPixelCollision(x + Math.cos(a)*playerPhysicsRadius, y + Math.sin(a)*playerPhysicsRadius)) return true;
@@ -269,6 +269,7 @@
     }
 
     function resolveCollision(dx, dy) {
+      if (!collisionPixels) return; // 안전 가드
       let nx = playerX + dx;
       if (!isColliding(nx, playerY)) playerX = nx;
       let ny = playerY + dy;
@@ -289,14 +290,14 @@
     }
 
     // ==========================================
-    // 조작 및 형광물질 안전 배치
+    // 조작 및 형광물질 안전 배치 (가비지 컬렉터 포함)
     // ==========================================
     function placeFluorescentMark() {
         let me = serverWorld.players[socket.id];
         if (me && me.fCount > 0) {
             socket.emit('useFluorescent', { x: playerX, y: playerY });
             localFMarks.push({ id: "local_" + Date.now(), x: playerX, y: playerY });
-            if (localFMarks.length > 20) localFMarks.shift(); 
+            if (localFMarks.length > 20) localFMarks.shift(); // 메모리 누수 방지 
             me.fCount--;
         } else {
             showSysMsg('형광물질이 없습니다.');
@@ -360,7 +361,7 @@
     }
 
     // ==========================================
-    // 3D 엔진 (완벽한 조명, 그림자, 최적화)
+    // 3D 엔진 (조명 한계치 방어 (4개) 및 완벽한 빛 제어)
     // ==========================================
     let bScene, bCamera, bPlayer, bLantern, truthBaseBox, playerTrailParticle, shadowGenerator;
     let meshDict = { players: {}, enemies: {}, items: {}, meteors: {}, fMarks: {}, fItems: {} };
@@ -378,7 +379,7 @@
         bCamera = new BABYLON.FreeCamera("mainCamera", new BABYLON.Vector3(0, 150, 0), scene);
         bCamera.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
 
-        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.05, 1), currentFov, 2, scene);
+        bLantern = new BABYLON.SpotLight("myLantern", new BABYLON.Vector3(0, 4, 0), new BABYLON.Vector3(0, -0.1, 1), currentFov, 2, scene);
         bLantern.diffuse = new BABYLON.Color3(1, 1, 1); 
         bLantern.intensity = 50; 
         bLantern.range = 800; 
@@ -401,6 +402,7 @@
         gMat.diffuseTexture = groundTex; 
         gMat.specularColor = new BABYLON.Color3(0,0,0); 
         gMat.emissiveColor = new BABYLON.Color3(0,0,0); 
+        // ✨ 가장 안전한 타협점 (4)
         gMat.maxSimultaneousLights = 4; 
         ground.material = gMat;
         ground.receiveShadows = true;
@@ -409,12 +411,11 @@
         const bMat = new BABYLON.StandardMaterial("bMat", scene);
         bMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); bMat.alpha = 0.5; border.material = bMat; border.position.y = 1;
 
-        // 반투명/산란의 느낌을 모사하는 진실의 뼈대 (투명하지는 않지만 빛을 머금는 느낌)
         truthBaseBox = BABYLON.MeshBuilder.CreateBox("truthBase", {width: 5, height: 15, depth: 5}, scene);
         let tMat = new BABYLON.StandardMaterial("tMat", scene);
-        tMat.diffuseColor = new BABYLON.Color3(1, 1, 1); // 순백의 몸체
+        tMat.diffuseColor = new BABYLON.Color3(1, 1, 1); 
         tMat.emissiveColor = new BABYLON.Color3(0, 0, 0); 
-        tMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); 
+        tMat.specularColor = new BABYLON.Color3(0, 0, 0); 
         tMat.maxSimultaneousLights = 4; 
         truthBaseBox.material = tMat;
         truthBaseBox.receiveShadows = true; 
@@ -479,10 +480,10 @@
     }
 
     // ==========================================
-    // 미니맵 동기화 (두께 연산 제거 및 안정화)
+    // ✨ 탁본/스탬프(Sonar) 효과가 적용된 미니맵 
     // ==========================================
     function drawMinimap() {
-        if (!collisionPixels) return;
+        if (!collisionPixels) return; // 뼈대 데이터 전송 전 엔진 멈춤 완벽 방지
 
         let mm = document.getElementById('minimap');
         let ctx = mm.getContext('2d');
@@ -523,9 +524,12 @@
             let startA = playerDir - currentFov/2;
             let ca = Math.cos(-serverWorld.angle); let sa = Math.sin(-serverWorld.angle);
             
+            let hitPoints = []; // 탁본 효과를 찍을 좌표 보관
+
             for(let i=0; i<=numRays; i++){
                 let a = startA + (i/numRays)*currentFov;
                 let d = 0; let maxD = 900; let step = 20; 
+                let hit = false;
                 while(d < maxD){
                     d += step;
                     let tx = playerX + Math.cos(a)*d; let ty = playerY + Math.sin(a)*d;
@@ -533,13 +537,24 @@
                     let cx = Math.floor((rx * ca - ry * sa + MAP_CENTER) * COLLISION_SCALE);
                     let cy = Math.floor((rx * sa + ry * ca + MAP_CENTER) * COLLISION_SCALE);
                     if (cx >= 0 && cx < Math.floor(MAP_SIZE*COLLISION_SCALE) && cy >= 0 && cy < Math.floor(MAP_SIZE*COLLISION_SCALE)) {
-                        // 벽 표면까지만 투명하게 뚫어줍니다. 억지 연산 삭제.
-                        if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) break; 
+                        // 벽을 만나는 즉시 전진 중단
+                        if (collisionPixels[(cx + cy * Math.floor(MAP_SIZE*COLLISION_SCALE)) * 4 + 3] > 128) {
+                            hit = true;
+                            break; 
+                        }
                     }
                 }
                 ctx.lineTo(Math.cos(a)*d*scale, Math.sin(a)*d*scale);
+                if(hit) hitPoints.push({d: d, a: a});
             }
-            ctx.closePath(); ctx.fill();
+            ctx.closePath(); ctx.fill(); // 부채꼴 시야 확보
+
+            // ✨ 빛이 벽에 닿은 곳마다 거대한 도장(스탬프)을 찍어 글자의 윗면을 밝힘
+            for(let hp of hitPoints) {
+                ctx.beginPath();
+                ctx.arc(Math.cos(hp.a)*hp.d*scale, Math.sin(hp.a)*hp.d*scale, 120 * scale, 0, Math.PI*2);
+                ctx.fill();
+            }
         }
         
         ctx.beginPath(); ctx.arc(0, 0, 55 * scale, 0, Math.PI*2); ctx.fill(); 
@@ -630,7 +645,7 @@
       
       let flicker = (battery < 20) ? Math.random() * 0.5 + 0.5 : 1.0;
       bLantern.position = new BABYLON.Vector3(px3, 4, pz3);
-      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.05, -Math.sin(playerDir));
+      bLantern.direction = new BABYLON.Vector3(Math.cos(playerDir), -0.1, -Math.sin(playerDir));
       bLantern.intensity = lanternOn ? 50 * flicker : 0;
       bLantern.angle = currentFov; 
       
@@ -686,6 +701,7 @@
               let fml = new BABYLON.PointLight("fml_"+safeId, new BABYLON.Vector3(to3Dx(mk.x), 2, to3Dz(mk.y)), bScene);
               fml.diffuse = new BABYLON.Color3(0, 0.8, 1); fml.intensity = 5; fml.range = 60;
               
+              // 크기를 줄인 수정체 형태의 형광물질 시각 효과
               let fm = BABYLON.MeshBuilder.CreatePolyhedron("fmm_"+safeId, {sizeX: 1, sizeY: 2, sizeZ: 1}, bScene);
               fm.position = new BABYLON.Vector3(to3Dx(mk.x), 1, to3Dz(mk.y));
               let fmat = new BABYLON.StandardMaterial("fmmat_"+safeId, bScene);
@@ -717,7 +733,7 @@
         let opx3 = to3Dx(p.x); let opz3 = to3Dz(p.y);
         meshDict.players[id].mesh.position.x = opx3; meshDict.players[id].mesh.position.z = opz3;
         meshDict.players[id].light.position = new BABYLON.Vector3(opx3, 4, opz3);
-        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.05, -Math.sin(p.dir));
+        meshDict.players[id].light.direction = new BABYLON.Vector3(Math.cos(p.dir), -0.1, -Math.sin(p.dir));
         meshDict.players[id].light.intensity = p.lantern ? 20 : 0;
       }
       for(let id in meshDict.players) { if(!serverWorld.players[id]) { meshDict.players[id].mesh.dispose(); meshDict.players[id].light.dispose(); delete meshDict.players[id]; } }
