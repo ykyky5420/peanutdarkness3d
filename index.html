@@ -507,8 +507,8 @@
 
                 let idx = (cy * mapScale + cx) * 4;
                 if(collisionPixels[idx + 3] <= 128) { 
-                    let x3D = rx * 0.1; 
-                    let z3D = -ry * 0.1; 
+                    let x3D = rx; 
+                    let z3D = -ry; 
                     let m = BABYLON.Matrix.Translation(x3D, -7.5, z3D); 
                     for(let i=0; i<16; i++) matrices.push(m.m[i]);
                 }
